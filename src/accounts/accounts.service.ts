@@ -9,15 +9,18 @@ import { Account } from './entities/account.entity';
 export class AccountsService {
   constructor(
     @InjectRepository(Account)
-    private readonly categoryRepository: Repository<Account>,
+    private readonly accountRepository: Repository<Account>,
   ) { }
 
-  create(createAccountDto: CreateAccountDto) {
-    return 'This action adds a new account';
+  async create(createAccountDto: CreateAccountDto): Promise<Account> {
+    console.log('jddjdjdjdjdjdj', createAccountDto);
+
+    const account = this.accountRepository.create(createAccountDto);
+    return this.accountRepository.save(account);
   }
 
   findAll() {
-    return this.categoryRepository.find();
+    return this.accountRepository.find();
   }
 
   findOne(id: number) {

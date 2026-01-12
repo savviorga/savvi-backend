@@ -3,6 +3,24 @@ import eslint from '@eslint/js';
 import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+/**
+ * Get the root directory, handling WSL UNC paths from Windows.
+ */
+function getRootDir() {
+  const filePath = fileURLToPath(import.meta.url);
+  let dirPath = path.dirname(filePath);
+  
+  // Convert WSL UNC paths (\\wsl.localhost\Distro\...) to Linux paths (/...)
+  const wslMatch = dirPath.match(/^\\\\wsl(?:\.localhost|\$)\\[^\\]+(.+)$/);
+  if (wslMatch) {
+    return wslMatch[1].replace(/\\/g, '/');
+  }
+  
+  return dirPath;
+}
 
 export default tseslint.config(
   {
@@ -20,7 +38,7 @@ export default tseslint.config(
       sourceType: 'commonjs',
       parserOptions: {
         projectService: true,
-        tsconfigRootDir: import.meta.dirname,
+        tsconfigRootDir: getRootDir(),
       },
     },
   },
