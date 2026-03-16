@@ -13,7 +13,7 @@ import { TransactionsService } from '../services/transactions.service';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { multerConfig } from 'src/infrastructure/config/multer.config';
+import { multerConfig } from '../../infrastructure/config/multer.config';
 
 @Controller('transactions')
 export class TransactionsController {

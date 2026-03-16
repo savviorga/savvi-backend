@@ -1,9 +1,16 @@
-import { IsString, IsOptional, IsBoolean, IsUUID, IsNumber, IsPositive, MaxLength, IsHexColor } from "class-validator";
+import { IsString, IsOptional, IsBoolean, IsUUID, IsNumber, IsPositive, MaxLength, IsHexColor, IsIn } from "class-validator";
+
+export const CATEGORY_TYPE_VALUES = ["ingreso", "egreso"] as const;
+export type CategoryType = (typeof CATEGORY_TYPE_VALUES)[number];
 
 export class CreateCategoryDto {
   @IsString()
   @MaxLength(100)
   name: string;
+
+  @IsString()
+  @IsIn(CATEGORY_TYPE_VALUES, { message: "type debe ser 'ingreso' o 'egreso'" })
+  type: CategoryType;
 
   @IsOptional()
   @IsString()

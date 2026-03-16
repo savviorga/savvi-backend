@@ -17,6 +17,9 @@ export class Category {
   @Column({ type: "varchar", length: 100 })
   name: string;
 
+  @Column({ type: "varchar", length: 10, default: "egreso" })
+  type: "ingreso" | "egreso";
+
   @Column({ type: "varchar", nullable: true })
   icon?: string;
 

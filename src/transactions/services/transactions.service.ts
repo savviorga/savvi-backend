@@ -9,7 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Transaction, TransactionFile } from '../entities/transaction.entity';
 import { Document } from '../entities/document.entity';
-import { S3Service } from 'src/s3/s3.service';
+import { S3Service } from '../../s3/s3.service';
 
 @Injectable()
 export class TransactionsService {

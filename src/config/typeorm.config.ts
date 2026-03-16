@@ -3,6 +3,13 @@ import { config } from 'dotenv';
 
 config(); // carga .env
 
+// SSL por defecto para hosts remotos (evita "no encryption" en servidores que lo exigen)
+const host = process.env.DB_HOST ?? '';
+const useSsl =
+  process.env.DB_SSL === 'true' ||
+  process.env.DB_SSL === '1' ||
+  (host !== 'localhost' && host !== '127.0.0.1' && host !== '');
+
 export const dataSourceOptions: DataSourceOptions = {
     type: 'postgres',
     host: process.env.DB_HOST,
@@ -11,6 +18,7 @@ export const dataSourceOptions: DataSourceOptions = {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     schema: 'finance',
+    ssl: useSsl ? { rejectUnauthorized: false } : false,
     extra: {
         options: '-c search_path=finance'
     },
