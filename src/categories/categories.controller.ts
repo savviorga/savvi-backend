@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, Delete } from '@nestjs/commo
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDto } from './dto/create-category.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
+import { UpdateBudgetDto } from './dto/update-budget.dto';
 
 @Controller('categories')
 export class CategoriesController {
@@ -25,6 +26,11 @@ export class CategoriesController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() updateCategoryDto: UpdateCategoryDto) {
     return this.categoriesService.update(+id, updateCategoryDto);
+  }
+
+  @Patch(':id/budget')
+  updateBudget(@Param('id') id: string, @Body() updateBudgetDto: UpdateBudgetDto) {
+    return this.categoriesService.updateBudget(id, updateBudgetDto);
   }
 
   @Delete(':id')

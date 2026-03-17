@@ -23,6 +23,9 @@ export class Account {
   @Column({ type: "text", nullable: true })
   description?: string;
 
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  balance: number;
+
   @Column({ default: true })
   isActive: boolean;
 

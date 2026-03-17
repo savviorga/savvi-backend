@@ -13,9 +13,11 @@ export class AccountsService {
   ) { }
 
   async create(createAccountDto: CreateAccountDto): Promise<Account> {
-    console.log('jddjdjdjdjdjdj', createAccountDto);
-
-    const account = this.accountRepository.create(createAccountDto);
+    const { initialBalance, ...rest } = createAccountDto;
+    const account = this.accountRepository.create({
+      ...rest,
+      balance: initialBalance ?? 0,
+    });
     return this.accountRepository.save(account);
   }
 

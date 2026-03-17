@@ -5,6 +5,8 @@ import {
   IsBoolean,
   MaxLength,
   Matches,
+  IsNumber,
+  Min,
 } from 'class-validator';
 
 export class CreateAccountDto {
@@ -31,4 +33,9 @@ export class CreateAccountDto {
   @IsOptional()
   @IsBoolean({ message: 'isActive debe ser un valor booleano' })
   isActive?: boolean;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'El saldo inicial debe ser un número' })
+  @Min(0, { message: 'El saldo inicial no puede ser negativo' })
+  initialBalance?: number;
 }
