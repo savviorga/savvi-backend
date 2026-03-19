@@ -9,7 +9,7 @@ export class CreateBudgetsTable1773800000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE TABLE "budgets" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "categoryId" uuid NOT NULL,
         "amount" numeric(12,2) NOT NULL,
         "period" character varying(20) NOT NULL DEFAULT 'monthly',

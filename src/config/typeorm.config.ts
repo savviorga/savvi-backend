@@ -20,7 +20,7 @@ export const dataSourceOptions: DataSourceOptions = {
     schema: 'finance',
     ssl: useSsl ? { rejectUnauthorized: false } : false,
     extra: {
-        options: '-c search_path=finance'
+        options: '-c search_path=finance,public'
     },
     entities: [__dirname + '/../**/*.entity{.ts,.js}'],
     migrations: [__dirname + '/../migrations/*{.ts,.js}'],

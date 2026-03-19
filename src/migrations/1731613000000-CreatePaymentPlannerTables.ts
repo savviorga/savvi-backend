@@ -11,7 +11,7 @@ export class CreatePaymentPlannerTables1731613000000
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
       CREATE TABLE "debts" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "name" character varying(200) NOT NULL,
         "payee" character varying(200) NOT NULL,
         "totalAmount" numeric(12,2) NOT NULL,
@@ -26,7 +26,7 @@ export class CreatePaymentPlannerTables1731613000000
     `);
     await queryRunner.query(`
       CREATE TABLE "debt_payments" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "debtId" uuid NOT NULL,
         "amount" numeric(12,2) NOT NULL,
         "paidAt" date NOT NULL,
