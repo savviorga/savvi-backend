@@ -28,6 +28,10 @@ export class CreateDebtDto {
   @IsDateString({}, { message: 'La fecha límite debe ser ISO (YYYY-MM-DD)' })
   dueDate: string;
 
+  @IsString()
+  // uuid en la base de datos (se valida como string para evitar acoplar el formato exacto)
+  accountId: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(2000)

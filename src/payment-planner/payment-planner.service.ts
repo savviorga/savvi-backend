@@ -30,6 +30,7 @@ export class PaymentPlannerService {
       totalAmount: total,
       remainingAmount: total,
       dueDate: new Date(createDebtDto.dueDate),
+      accountId: createDebtDto.accountId,
       notes: createDebtDto.notes ?? null,
       isRecurring: createDebtDto.isRecurring ?? false,
       recurrenceType: createDebtDto.isRecurring ? (createDebtDto.recurrenceType ?? null) : null,
@@ -85,6 +86,7 @@ export class PaymentPlannerService {
     if (updateDebtDto.dueDate != null)
       debt.dueDate = new Date(updateDebtDto.dueDate);
     if (updateDebtDto.notes !== undefined) debt.notes = updateDebtDto.notes;
+    if (updateDebtDto.accountId != null) debt.accountId = updateDebtDto.accountId;
     if (updateDebtDto.isRecurring !== undefined) {
       debt.isRecurring = updateDebtDto.isRecurring;
       if (!updateDebtDto.isRecurring) {

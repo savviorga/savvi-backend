@@ -30,6 +30,11 @@ export class Debt {
   @Column({ type: 'date' })
   dueDate: Date;
 
+  // Cuenta asociada a esta obligación (para preseleccionar dónde se pagan los montos).
+  // Nullable por compatibilidad con deudas ya existentes.
+  @Column({ type: 'uuid', nullable: true })
+  accountId?: string | null;
+
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
