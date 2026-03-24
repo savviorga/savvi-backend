@@ -5,8 +5,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   OneToMany,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { DebtPayment } from './debt-payment.entity';
+import { User } from '../../auth/entities/user.entity';
 
 export type DebtStatus = 'pending' | 'paid';
 
@@ -14,6 +17,13 @@ export type DebtStatus = 'pending' | 'paid';
 export class Debt {
   @PrimaryGeneratedColumn('uuid')
   id: string;
+
+  @Column({ name: 'user_id', type: 'uuid' })
+  userId: string;
+
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'user_id' })
+  user: User;
 
   @Column({ type: 'varchar', length: 200 })
   name: string;

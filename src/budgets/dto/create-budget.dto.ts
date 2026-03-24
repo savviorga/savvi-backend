@@ -17,7 +17,13 @@ export class CreateBudgetDto {
   categoryId: string;
 
   @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
   amount: number;
+
+  /** Si es true, amount se ignora al crear (0) y se actualiza sumando partidas. */
+  @IsOptional()
+  @IsBoolean()
+  amountAutoCalculated?: boolean;
 
   @IsIn(BUDGET_PERIOD_VALUES)
   period: BudgetPeriod = 'monthly';

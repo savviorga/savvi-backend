@@ -4,12 +4,22 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from "typeorm";
+import { User } from "../../auth/entities/user.entity";
 
 @Entity("accounts")
 export class Account {
   @PrimaryGeneratedColumn("uuid")
   id: string;
+
+  @Column({ name: "user_id", type: "uuid" })
+  userId: string;
+
+  @ManyToOne(() => User, { onDelete: "CASCADE" })
+  @JoinColumn({ name: "user_id" })
+  user: User;
 
   @Column({ type: "varchar", length: 100 })
   name: string;

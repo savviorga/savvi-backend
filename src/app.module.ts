@@ -9,16 +9,20 @@ import { AccountsModule } from './accounts/accounts.module';
 import { AuthModule } from './auth/auth.module';
 import { PaymentPlannerModule } from './payment-planner/payment-planner.module';
 import { BudgetsModule } from './budgets/budgets.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { TransferTemplatesModule } from './transfer-templates/transfer-templates.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot(dataSourceOptions),
+    ScheduleModule.forRoot(),
     AuthModule,
     TransactionsModule,
     CategoriesModule,
     AccountsModule,
     PaymentPlannerModule,
     BudgetsModule,
+    TransferTemplatesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

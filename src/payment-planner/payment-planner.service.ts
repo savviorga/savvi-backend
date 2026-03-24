@@ -2,15 +2,16 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Debt } from './entities/debt.entity';
-import { DebtPayment } from './entities/debt-payment.entity';
-import { CreateDebtDto } from './dto/create-debt.dto';
-import { UpdateDebtDto } from './dto/update-debt.dto';
-import { RegisterPaymentDto } from './dto/register-payment.dto';
-import { TransactionsService } from '../transactions/services/transactions.service';
+} from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Debt } from "./entities/debt.entity";
+import { DebtPayment } from "./entities/debt-payment.entity";
+import { CreateDebtDto } from "./dto/create-debt.dto";
+import { UpdateDebtDto } from "./dto/update-debt.dto";
+import { RegisterPaymentDto } from "./dto/register-payment.dto";
+import { TransactionsService } from "../transactions/services/transactions.service";
+import { AccountsService } from "../accounts/accounts.service";
 
 @Injectable()
 export class PaymentPlannerService {
@@ -20,11 +21,16 @@ export class PaymentPlannerService {
     @InjectRepository(DebtPayment)
     private readonly debtPaymentRepository: Repository<DebtPayment>,
     private readonly transactionsService: TransactionsService,
+    private readonly accountsService: AccountsService,
   ) {}
 
-  async create(createDebtDto: CreateDebtDto): Promise<Debt> {
+  async create(userId: string, createDebtDto: CreateDebtDto): Promise<Debt> {
+    if (createDebtDto.accountId) {
+      await this.accountsService.assertOwnedByUser(userId, createDebtDto.accountId);
+    }
     const total = Number(createDebtDto.totalAmount);
     const debt = this.debtRepository.create({
+      userId,
       name: createDebtDto.name,
       payee: createDebtDto.payee,
       totalAmount: total,
@@ -33,50 +39,62 @@ export class PaymentPlannerService {
       accountId: createDebtDto.accountId,
       notes: createDebtDto.notes ?? null,
       isRecurring: createDebtDto.isRecurring ?? false,
-      recurrenceType: createDebtDto.isRecurring ? (createDebtDto.recurrenceType ?? null) : null,
-      recurrenceDay: createDebtDto.isRecurring ? (createDebtDto.recurrenceDay ?? null) : null,
-      status: 'pending',
+      recurrenceType: createDebtDto.isRecurring
+        ? (createDebtDto.recurrenceType ?? null)
+        : null,
+      recurrenceDay: createDebtDto.isRecurring
+        ? (createDebtDto.recurrenceDay ?? null)
+        : null,
+      status: "pending",
     });
     return this.debtRepository.save(debt);
   }
 
-  findAll(): Promise<Debt[]> {
+  findAll(userId: string): Promise<Debt[]> {
     return this.debtRepository.find({
-      relations: ['payments'],
-      order: { dueDate: 'ASC', createdAt: 'DESC' },
+      where: { userId },
+      relations: ["payments"],
+      order: { dueDate: "ASC", createdAt: "DESC" },
     });
   }
 
-  findPending(): Promise<Debt[]> {
+  findPending(userId: string): Promise<Debt[]> {
     return this.debtRepository.find({
-      where: { status: 'pending' },
-      relations: ['payments'],
-      order: { dueDate: 'ASC' },
+      where: { userId, status: "pending" },
+      relations: ["payments"],
+      order: { dueDate: "ASC" },
     });
   }
 
-  async findOne(id: string): Promise<Debt> {
+  async findOne(userId: string, id: string): Promise<Debt> {
     const debt = await this.debtRepository.findOne({
-      where: { id },
-      relations: ['payments'],
+      where: { id, userId },
+      relations: ["payments"],
     });
     if (!debt) {
-      throw new NotFoundException('Deuda no encontrada');
+      throw new NotFoundException("Deuda no encontrada");
     }
     return debt;
   }
 
-  async update(id: string, updateDebtDto: UpdateDebtDto): Promise<Debt> {
-    const debt = await this.findOne(id);
-    if (debt.status === 'paid') {
-      throw new BadRequestException('No se puede editar una deuda ya pagada');
+  async update(
+    userId: string,
+    id: string,
+    updateDebtDto: UpdateDebtDto,
+  ): Promise<Debt> {
+    const debt = await this.findOne(userId, id);
+    if (updateDebtDto.accountId) {
+      await this.accountsService.assertOwnedByUser(userId, updateDebtDto.accountId);
+    }
+    if (debt.status === "paid") {
+      throw new BadRequestException("No se puede editar una deuda ya pagada");
     }
     if (updateDebtDto.totalAmount != null) {
       const total = Number(updateDebtDto.totalAmount);
       const remaining = Number(debt.remainingAmount);
       if (total < remaining) {
         throw new BadRequestException(
-          'El monto total no puede ser menor al pendiente por pagar',
+          "El monto total no puede ser menor al pendiente por pagar",
         );
       }
       debt.totalAmount = total;
@@ -86,7 +104,8 @@ export class PaymentPlannerService {
     if (updateDebtDto.dueDate != null)
       debt.dueDate = new Date(updateDebtDto.dueDate);
     if (updateDebtDto.notes !== undefined) debt.notes = updateDebtDto.notes;
-    if (updateDebtDto.accountId != null) debt.accountId = updateDebtDto.accountId;
+    if (updateDebtDto.accountId !== undefined)
+      debt.accountId = updateDebtDto.accountId;
     if (updateDebtDto.isRecurring !== undefined) {
       debt.isRecurring = updateDebtDto.isRecurring;
       if (!updateDebtDto.isRecurring) {
@@ -94,24 +113,27 @@ export class PaymentPlannerService {
         debt.recurrenceDay = null;
       }
     }
-    if (updateDebtDto.recurrenceType !== undefined) debt.recurrenceType = updateDebtDto.recurrenceType ?? null;
-    if (updateDebtDto.recurrenceDay !== undefined) debt.recurrenceDay = updateDebtDto.recurrenceDay ?? null;
+    if (updateDebtDto.recurrenceType !== undefined)
+      debt.recurrenceType = updateDebtDto.recurrenceType ?? null;
+    if (updateDebtDto.recurrenceDay !== undefined)
+      debt.recurrenceDay = updateDebtDto.recurrenceDay ?? null;
     return this.debtRepository.save(debt);
   }
 
-  async remove(id: string): Promise<Debt> {
-    const debt = await this.findOne(id);
+  async remove(userId: string, id: string): Promise<Debt> {
+    const debt = await this.findOne(userId, id);
     await this.debtRepository.remove(debt);
     return debt;
   }
 
   async registerPayment(
+    userId: string,
     debtId: string,
     dto: RegisterPaymentDto,
   ): Promise<{ debt: Debt; payment: DebtPayment; transaction: unknown }> {
-    const debt = await this.findOne(debtId);
-    if (debt.status === 'paid') {
-      throw new BadRequestException('Esta deuda ya está pagada');
+    const debt = await this.findOne(userId, debtId);
+    if (debt.status === "paid") {
+      throw new BadRequestException("Esta deuda ya está pagada");
     }
     const remaining = Number(debt.remainingAmount);
     const amount = Number(dto.amount);
@@ -127,9 +149,9 @@ export class PaymentPlannerService {
       dto.description ||
       `Pago planificador: ${debt.name} - ${debt.payee}`;
 
-    const transaction = await this.transactionsService.create({
+    const transaction = await this.transactionsService.create(userId, {
       date: paidAtStr,
-      type: 'egreso',
+      type: "egreso",
       amount,
       category: dto.category,
       account: dto.account,
@@ -145,13 +167,13 @@ export class PaymentPlannerService {
     const savedPayment = await this.debtPaymentRepository.save(payment);
 
     const newRemaining = remaining - amount;
-    const newStatus = newRemaining <= 0 ? 'paid' : 'pending';
-    await this.debtRepository.update(debtId, {
+    const newStatus = newRemaining <= 0 ? "paid" : "pending";
+    await this.debtRepository.update({ id: debtId, userId }, {
       remainingAmount: newRemaining,
       status: newStatus,
     });
 
-    const updatedDebt = await this.findOne(debtId);
+    const updatedDebt = await this.findOne(userId, debtId);
     return {
       debt: updatedDebt,
       payment: savedPayment,
@@ -159,11 +181,13 @@ export class PaymentPlannerService {
     };
   }
 
-  /** Total pagado en todas las deudas (historial) */
-  async getTotalPaid(): Promise<number> {
+  /** Total pagado en deudas del usuario (historial de pagos del planificador). */
+  async getTotalPaid(userId: string): Promise<number> {
     const result = await this.debtPaymentRepository
-      .createQueryBuilder('p')
-      .select('COALESCE(SUM(p.amount), 0)', 'total')
+      .createQueryBuilder("p")
+      .innerJoin("p.debt", "d")
+      .where("d.userId = :userId", { userId })
+      .select("COALESCE(SUM(p.amount), 0)", "total")
       .getRawOne<{ total: string }>();
     return Number(result?.total ?? 0);
   }

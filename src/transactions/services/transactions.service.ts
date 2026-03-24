@@ -1,15 +1,11 @@
-import {
-  BadRequestException,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
-import { CreateTransactionDto } from '../dto/create-transaction.dto';
-import { UpdateTransactionDto } from '../dto/update-transaction.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Transaction, TransactionFile } from '../entities/transaction.entity';
-import { Document } from '../entities/document.entity';
-import { S3Service } from '../../s3/s3.service';
+import { Injectable, NotFoundException } from "@nestjs/common";
+import { CreateTransactionDto } from "../dto/create-transaction.dto";
+import { UpdateTransactionDto } from "../dto/update-transaction.dto";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { Transaction } from "../entities/transaction.entity";
+import { Document } from "../entities/document.entity";
+import { S3Service } from "../../s3/s3.service";
 
 @Injectable()
 export class TransactionsService {
@@ -22,17 +18,22 @@ export class TransactionsService {
   ) {}
 
   async create(
+    userId: string,
     createTransactionDto: CreateTransactionDto,
   ): Promise<Transaction> {
     const transaction = this.transactionRepository.create({
       ...createTransactionDto,
+      userId,
     });
     return await this.transactionRepository.save(transaction);
   }
 
-  async createBulk(createTransactionsDto: CreateTransactionDto[]) {
+  async createBulk(
+    userId: string,
+    createTransactionsDto: CreateTransactionDto[],
+  ) {
     const transactions = this.transactionRepository.create(
-      createTransactionsDto,
+      createTransactionsDto.map((row) => ({ ...row, userId })),
     );
     const saved = await this.transactionRepository.save(transactions);
 
@@ -42,62 +43,66 @@ export class TransactionsService {
     };
   }
 
-  findAll() {
-    return this.transactionRepository.find();
+  findAll(userId: string) {
+    return this.transactionRepository.find({
+      where: { userId },
+      order: { date: "DESC", id: "DESC" },
+    });
   }
 
-  findOne(id: string) {
-    return this.transactionRepository.findOneBy({ id });
-  }
-
-  async update(id: string, updateTransactionDto: UpdateTransactionDto) {
-    await this.transactionRepository.update(id, updateTransactionDto);
-    return this.findOne(id);
-  }
-
-  async remove(id: string) {
-    const transaction = await this.findOne(id);
-    if (transaction) {
-      await this.transactionRepository.remove(transaction);
+  async findOne(userId: string, id: string): Promise<Transaction> {
+    const transaction = await this.transactionRepository.findOne({
+      where: { id, userId },
+    });
+    if (!transaction) {
+      throw new NotFoundException("Transacción no encontrada");
     }
     return transaction;
   }
 
+  async update(
+    userId: string,
+    id: string,
+    updateTransactionDto: UpdateTransactionDto,
+  ) {
+    await this.findOne(userId, id);
+    await this.transactionRepository.update({ id, userId }, updateTransactionDto);
+    return this.findOne(userId, id);
+  }
+
+  async remove(userId: string, id: string) {
+    const transaction = await this.findOne(userId, id);
+    await this.transactionRepository.remove(transaction);
+    return transaction;
+  }
+
   async uploadTransactionFiles(
+    userId: string,
     transactionId: string,
     files: Express.Multer.File[],
   ) {
-    const tx = await this.transactionRepository.findOneBy({
-      id: transactionId,
-    });
-
-    if (!tx) {
-      throw new NotFoundException('Transacción no encontrada');
-    }
+    const tx = await this.findOne(userId, transactionId);
 
     const documents: Document[] = [];
 
     for (const file of files) {
-      // Subir a S3
       const result = await this.s3Service.upload(
         `transactions/${transactionId}`,
         file,
       );
 
-      // Crear entidad Document
       const document = this.documentRepository.create({
         name: file.originalname,
         size: file.size,
         bucket: result.bucket,
         keyS3: result.key,
-        module: 'transactions',
-        refId: transactionId.toString(),
+        module: "transactions",
+        refId: tx.id.toString(),
       });
 
       documents.push(document);
     }
 
-    // Guardar documentos en BD
     await this.documentRepository.save(documents);
 
     return {
@@ -106,14 +111,16 @@ export class TransactionsService {
     };
   }
 
-  async listTransactionDocuments(transactionId: string) {
+  async listTransactionDocuments(userId: string, transactionId: string) {
+    await this.findOne(userId, transactionId);
+
     const documents = await this.documentRepository.find({
       where: {
-        module: 'transactions',
+        module: "transactions",
         refId: transactionId.toString(),
       },
       order: {
-        createdAt: 'DESC',
+        createdAt: "DESC",
       },
     });
 
@@ -124,7 +131,7 @@ export class TransactionsService {
         size: Number(doc.size),
         url: await this.s3Service.getPresignedUrl(
           doc.keyS3,
-          3600, // 1 hora
+          3600,
         ),
       })),
     );

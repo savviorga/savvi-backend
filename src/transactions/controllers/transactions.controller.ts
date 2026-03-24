@@ -8,64 +8,84 @@ import {
   Delete,
   UseInterceptors,
   UploadedFiles,
-} from '@nestjs/common';
-import { TransactionsService } from '../services/transactions.service';
-import { CreateTransactionDto } from '../dto/create-transaction.dto';
-import { UpdateTransactionDto } from '../dto/update-transaction.dto';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { multerConfig } from '../../infrastructure/config/multer.config';
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import type { Request } from "express";
+import { TransactionsService } from "../services/transactions.service";
+import { CreateTransactionDto } from "../dto/create-transaction.dto";
+import { UpdateTransactionDto } from "../dto/update-transaction.dto";
+import { FilesInterceptor } from "@nestjs/platform-express";
+import { multerConfig } from "../../infrastructure/config/multer.config";
+import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
 
-@Controller('transactions')
+@UseGuards(JwtAuthGuard)
+@Controller("transactions")
 export class TransactionsController {
   constructor(private readonly transactionsService: TransactionsService) {}
 
   @Post()
-  create(@Body() createTransactionDto: CreateTransactionDto) {
-    return this.transactionsService.create(createTransactionDto);
+  create(@Req() req: Request, @Body() createTransactionDto: CreateTransactionDto) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.create(userId, createTransactionDto);
   }
 
-  @Post('bulk')
-  createBulk(@Body() createTransactionsDto: CreateTransactionDto[]) {
-    return this.transactionsService.createBulk(createTransactionsDto);
+  @Post("bulk")
+  createBulk(
+    @Req() req: Request,
+    @Body() createTransactionsDto: CreateTransactionDto[],
+  ) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.createBulk(userId, createTransactionsDto);
   }
 
   @Get()
-  findAll() {
-    return this.transactionsService.findAll();
+  findAll(@Req() req: Request) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.findAll(userId);
   }
 
-  @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.transactionsService.findOne(id);
+  /** Debe ir antes de @Get(':id') para no confundir el segmento "documents". */
+  @Get(":id/documents")
+  async listDocuments(@Req() req: Request, @Param("id") id: string) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.listTransactionDocuments(userId, id);
   }
 
-  @Patch(':id')
+  @Get(":id")
+  findOne(@Req() req: Request, @Param("id") id: string) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.findOne(userId, id);
+  }
+
+  @Patch(":id")
   update(
-    @Param('id') id: string,
+    @Req() req: Request,
+    @Param("id") id: string,
     @Body() updateTransactionDto: UpdateTransactionDto,
   ) {
-    return this.transactionsService.update(id, updateTransactionDto);
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.update(userId, id, updateTransactionDto);
   }
 
-  @Delete(':id')
-  remove(@Param('id') id: string) {
-    return this.transactionsService.remove(id);
+  @Delete(":id")
+  remove(@Req() req: Request, @Param("id") id: string) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.remove(userId, id);
   }
 
-  @Post('upload-files')
-  @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
+  @Post("upload-files")
+  @UseInterceptors(FilesInterceptor("files", 10, multerConfig))
   async uploadFiles(
-    @Body('transactionId') transactionId: string,
+    @Req() req: Request,
+    @Body("transactionId") transactionId: string,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
+    const userId = (req.user as { userId: string }).userId;
     return this.transactionsService.uploadTransactionFiles(
+      userId,
       transactionId,
       files,
     );
-  }
-
-  @Get(':id/documents')
-  async listDocuments(@Param('id') id: string) {
-    return this.transactionsService.listTransactionDocuments(id);
   }
 }

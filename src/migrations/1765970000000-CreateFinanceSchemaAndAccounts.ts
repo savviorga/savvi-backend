@@ -15,7 +15,7 @@ export class CreateFinanceSchemaAndAccounts1765970000000
     await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS "finance"`);
     await queryRunner.query(`
       CREATE TABLE IF NOT EXISTS "finance"."accounts" (
-        "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
+        "id" uuid NOT NULL DEFAULT gen_random_uuid(),
         "name" character varying(100) NOT NULL,
         "icon" character varying,
         "color" character varying,

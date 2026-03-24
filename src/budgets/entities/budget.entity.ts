@@ -3,10 +3,12 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { Category } from '../../categories/entities/category.entity';
+import { BudgetDetail } from './budget-detail.entity';
 
 export type BudgetPeriod = 'monthly';
 
@@ -24,6 +26,10 @@ export class Budget {
   @Column({ type: 'numeric', precision: 12, scale: 2 })
   amount: number;
 
+  /** Si es true, el monto se recalcula como la suma de estimatedAmount de las partidas. */
+  @Column({ type: 'boolean', default: false })
+  amountAutoCalculated: boolean;
+
   @Column({ type: 'varchar', length: 20, default: 'monthly' })
   period: BudgetPeriod;
 
@@ -35,6 +41,9 @@ export class Budget {
 
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
+
+  @OneToMany(() => BudgetDetail, (d) => d.budget)
+  details: BudgetDetail[];
 
   @CreateDateColumn()
   createdAt: Date;

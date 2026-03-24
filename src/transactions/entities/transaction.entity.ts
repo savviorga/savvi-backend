@@ -1,4 +1,11 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  JoinColumn,
+} from 'typeorm';
+import { User } from '../../auth/entities/user.entity';
 
  export type TransactionFile = {
   filename: string;
@@ -12,6 +19,13 @@ import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
 export class Transaction {
     @PrimaryGeneratedColumn('uuid')
     id: string;
+
+    @Column({ name: 'user_id', type: 'uuid' })
+    userId: string;
+
+    @ManyToOne(() => User, { onDelete: 'CASCADE' })
+    @JoinColumn({ name: 'user_id' })
+    user: User;
 
     @Column({ type: 'date' })
     date: Date;
