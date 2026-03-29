@@ -11,6 +11,7 @@ import { PaymentPlannerModule } from './payment-planner/payment-planner.module';
 import { BudgetsModule } from './budgets/budgets.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TransferTemplatesModule } from './transfer-templates/transfer-templates.module';
+import { WaitingListModule } from './waitinglist/waitinglist.module';
 
 @Module({
   imports: [
@@ -23,6 +24,7 @@ import { TransferTemplatesModule } from './transfer-templates/transfer-templates
     PaymentPlannerModule,
     BudgetsModule,
     TransferTemplatesModule,
+    WaitingListModule,
   ],
   controllers: [AppController],
   providers: [AppService],
