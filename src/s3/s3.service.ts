@@ -1,8 +1,9 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, OnModuleInit, Logger } from '@nestjs/common';
 import {
   PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  PutBucketCorsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Client, bucket } from '../infrastructure/config/s3.config';
@@ -13,8 +14,39 @@ import { UploadS3Response } from './types';
 import { Readable } from 'stream';
 
 @Injectable()
-export class S3Service {
-  constructor() {}
+export class S3Service implements OnModuleInit {
+  private readonly logger = new Logger(S3Service.name);
+
+  async onModuleInit() {
+    await this.ensureBucketCors();
+  }
+
+  private async ensureBucketCors(): Promise<void> {
+    try {
+      await s3Client.send(
+        new PutBucketCorsCommand({
+          Bucket: bucket,
+          CORSConfiguration: {
+            CORSRules: [
+              {
+                AllowedHeaders: ['*'],
+                AllowedMethods: ['PUT', 'GET', 'HEAD'],
+                AllowedOrigins: ['*'],
+                ExposeHeaders: ['ETag'],
+                MaxAgeSeconds: 3600,
+              },
+            ],
+          },
+        }),
+      );
+      this.logger.log(`CORS configurado correctamente en bucket "${bucket}"`);
+    } catch (error: any) {
+      this.logger.warn(
+        `No se pudo configurar CORS en bucket "${bucket}": ${error.message}. ` +
+        'Configúralo manualmente en la consola de AWS si la subida directa falla.',
+      );
+    }
+  }
 
   async upload(
     folder: string,
@@ -151,6 +183,36 @@ export class S3Service {
       console.error(`Error generating presigned URL for ${operation}:`, error);
       throw new InternalServerErrorException({
         message: `Error al generar la URL firmada para ${operation}`,
+        detail: error?.message || error,
+      });
+    }
+  }
+
+  /**
+   * Genera una URL prefirmada para PUT con contentType explícito y key completa.
+   * Usada por el flujo de subida directa desde el cliente.
+   */
+  async generatePresignedUploadUrl(
+    key: string,
+    contentType: string,
+    expiresIn: number = 60,
+  ): Promise<{ url: string; key: string }> {
+    try {
+      const url = await getSignedUrl(
+        s3Client,
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          ContentType: contentType,
+        }),
+        { expiresIn },
+      );
+
+      return { url, key };
+    } catch (error: any) {
+      console.error('Error generating presigned upload URL:', error);
+      throw new InternalServerErrorException({
+        message: 'Error al generar la URL firmada para subida',
         detail: error?.message || error,
       });
     }

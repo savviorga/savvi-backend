@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException } from "@nestjs/common";
 import { CreateTransactionDto } from "../dto/create-transaction.dto";
 import { UpdateTransactionDto } from "../dto/update-transaction.dto";
+import { UploadedFileMetadataDto } from "../dto/confirm-upload.dto";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Transaction } from "../entities/transaction.entity";
 import { Document } from "../entities/document.entity";
 import { S3Service } from "../../s3/s3.service";
+import { bucket } from "../../infrastructure/config/s3.config";
 
 @Injectable()
 export class TransactionsService {
@@ -109,6 +111,29 @@ export class TransactionsService {
       transactionId,
       documents,
     };
+  }
+
+  async confirmUploadedFiles(
+    userId: string,
+    transactionId: string,
+    files: UploadedFileMetadataDto[],
+  ) {
+    const tx = await this.findOne(userId, transactionId);
+
+    const documents = files.map((f) =>
+      this.documentRepository.create({
+        name: f.name,
+        size: f.size,
+        bucket,
+        keyS3: f.key,
+        module: 'transactions',
+        refId: tx.id.toString(),
+      }),
+    );
+
+    await this.documentRepository.save(documents);
+
+    return { transactionId, documents };
   }
 
   async listTransactionDocuments(userId: string, transactionId: string) {

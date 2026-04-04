@@ -15,6 +15,7 @@ import type { Request } from "express";
 import { TransactionsService } from "../services/transactions.service";
 import { CreateTransactionDto } from "../dto/create-transaction.dto";
 import { UpdateTransactionDto } from "../dto/update-transaction.dto";
+import { ConfirmUploadDto } from "../dto/confirm-upload.dto";
 import { FilesInterceptor } from "@nestjs/platform-express";
 import { multerConfig } from "../../infrastructure/config/multer.config";
 import { JwtAuthGuard } from "../../auth/guards/jwt-auth.guard";
@@ -86,6 +87,23 @@ export class TransactionsController {
       userId,
       transactionId,
       files,
+    );
+  }
+
+  /**
+   * Confirma archivos ya subidos directamente a S3 vía presigned URL.
+   * Registra los Document en la base de datos.
+   */
+  @Post("confirm-upload")
+  async confirmUpload(
+    @Req() req: Request,
+    @Body() dto: ConfirmUploadDto,
+  ) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.confirmUploadedFiles(
+      userId,
+      dto.transactionId,
+      dto.files,
     );
   }
 }
