@@ -2,22 +2,22 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { TransactionsService } from "../transactions/services/transactions.service";
-import { CreateTransactionDto } from "../transactions/dto/create-transaction.dto";
-import { CreateTransferTemplateDto } from "./dto/create-transfer-template.dto";
-import { UpdateTransferTemplateDto } from "./dto/update-transfer-template.dto";
-import { ExecuteTransferDto } from "./dto/execute-transfer.dto";
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { TransactionsService } from '../transactions/services/transactions.service';
+import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
+import { CreateTransferTemplateDto } from './dto/create-transfer-template.dto';
+import { UpdateTransferTemplateDto } from './dto/update-transfer-template.dto';
+import { ExecuteTransferDto } from './dto/execute-transfer.dto';
 import {
   TransferTemplate,
   TransferTemplateFrequency,
-} from "./entities/transfer-template.entity";
-import { RemindersService } from "./reminders.service";
-import { Reminder } from "./entities/reminder.entity";
-import { calcNextDueDate } from "./transfer-schedule.util";
-import { AccountsService } from "../accounts/accounts.service";
+} from './entities/transfer-template.entity';
+import { RemindersService } from './reminders.service';
+import { Reminder } from './entities/reminder.entity';
+import { calcNextDueDate } from './transfer-schedule.util';
+import { AccountsService } from '../accounts/accounts.service';
 
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
@@ -43,7 +43,7 @@ export class TransferTemplatesService {
     await this.accountsService.assertOwnedByUser(userId, dto.fromAccountId);
 
     const customDays =
-      dto.frequency === "custom" ? dto.customIntervalDays ?? null : null;
+      dto.frequency === 'custom' ? (dto.customIntervalDays ?? null) : null;
     const nextDueDate = calcNextDueDate(
       dto.frequency,
       dto.dayOfMonth,
@@ -75,16 +75,16 @@ export class TransferTemplatesService {
   async findAll(userId: string): Promise<TransferTemplate[]> {
     return this.templateRepository.find({
       where: { userId },
-      relations: ["fromAccount"],
-      order: { nextDueDate: "ASC", updatedAt: "DESC" },
+      relations: ['fromAccount'],
+      order: { nextDueDate: 'ASC', updatedAt: 'DESC' },
     });
   }
 
   async findDueToday(): Promise<TransferTemplate[]> {
     return this.templateRepository
-      .createQueryBuilder("t")
-      .where("t.nextDueDate = CURRENT_DATE")
-      .andWhere("t.isActive = true")
+      .createQueryBuilder('t')
+      .where('t.nextDueDate = CURRENT_DATE')
+      .andWhere('t.isActive = true')
       .getMany();
   }
 
@@ -96,7 +96,7 @@ export class TransferTemplatesService {
     const template = await this.templateRepository.findOne({
       where: { id, userId },
     });
-    if (!template) throw new NotFoundException("Plantilla no encontrada");
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
 
     if (dto.fromAccountId !== undefined) {
       await this.accountsService.assertOwnedByUser(userId, dto.fromAccountId);
@@ -122,7 +122,7 @@ export class TransferTemplatesService {
 
     if (dto.frequency !== undefined) {
       template.frequency = dto.frequency as TransferTemplateFrequency;
-      if (dto.frequency !== "custom") {
+      if (dto.frequency !== 'custom') {
         template.customIntervalDays = null;
       }
     }
@@ -140,11 +140,11 @@ export class TransferTemplatesService {
 
     if (scheduleChanged) {
       const freq = template.frequency;
-      if (freq === "custom") {
+      if (freq === 'custom') {
         const days = template.customIntervalDays;
         if (days == null || days < 1) {
           throw new BadRequestException(
-            "Para frecuencia personalizada indica el intervalo en días (1-3660).",
+            'Para frecuencia personalizada indica el intervalo en días (1-3660).',
           );
         }
       }
@@ -159,18 +159,25 @@ export class TransferTemplatesService {
     return this.templateRepository.save(template);
   }
 
-  async toggleActive(
-    userId: string,
-    id: string,
-  ): Promise<TransferTemplate> {
+  async toggleActive(userId: string, id: string): Promise<TransferTemplate> {
     const template = await this.templateRepository.findOne({
       where: { id, userId },
     });
-    if (!template) throw new NotFoundException("Plantilla no encontrada");
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
 
     template.isActive = !template.isActive;
     template.updatedAt = new Date();
     return this.templateRepository.save(template);
+  }
+
+  async remove(userId: string, id: string): Promise<{ message: string }> {
+    const template = await this.templateRepository.findOne({
+      where: { id, userId },
+    });
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
+
+    await this.templateRepository.remove(template);
+    return { message: 'Plantilla eliminada' };
   }
 
   async executeTransfer(
@@ -180,14 +187,14 @@ export class TransferTemplatesService {
     const template = await this.templateRepository.findOne({
       where: { id: dto.templateId, userId },
     });
-    if (!template) throw new NotFoundException("Plantilla no encontrada");
+    if (!template) throw new NotFoundException('Plantilla no encontrada');
     if (!template.isActive) {
-      throw new BadRequestException("La plantilla está inactiva");
+      throw new BadRequestException('La plantilla está inactiva');
     }
 
     const amount = Number(dto.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
-      throw new BadRequestException("Monto inválido");
+      throw new BadRequestException('Monto inválido');
     }
 
     const tag = `transfer_template_id:${template.id}`;
@@ -198,9 +205,9 @@ export class TransferTemplatesService {
 
     const transactionPayload: CreateTransactionDto = {
       date: new Date().toISOString().slice(0, 10),
-      type: dto.transactionType ?? "egreso",
+      type: dto.transactionType ?? 'egreso',
       amount,
-      category: truncate(template.name || "Transferencia", 100),
+      category: truncate(template.name || 'Transferencia', 100),
       account: template.fromAccountId,
       description,
     };
@@ -230,12 +237,11 @@ export class TransferTemplatesService {
     templateId: string,
   ): Promise<void> {
     const reminder = await this.reminderRepository.findOne({
-      where: { templateId, status: "scheduled" },
-      order: { scheduledAt: "DESC" },
+      where: { templateId, status: 'scheduled' },
+      order: { scheduledAt: 'DESC' },
     });
 
     if (!reminder) return;
     await this.remindersService.markAsSent(reminder.id);
   }
 }
-

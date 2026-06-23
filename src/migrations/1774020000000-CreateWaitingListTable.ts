@@ -17,8 +17,6 @@ export class CreateWaitingListTable1774020000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP TABLE IF EXISTS "finance"."waiting_list"`,
-    );
+    await queryRunner.query(`DROP TABLE IF EXISTS "finance"."waiting_list"`);
   }
 }

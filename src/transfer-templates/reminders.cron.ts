@@ -1,7 +1,7 @@
-import { Cron } from "@nestjs/schedule";
-import { Injectable } from "@nestjs/common";
-import { TransferTemplatesService } from "./transfer-templates.service";
-import { RemindersService } from "./reminders.service";
+import { Cron } from '@nestjs/schedule';
+import { Injectable } from '@nestjs/common';
+import { TransferTemplatesService } from './transfer-templates.service';
+import { RemindersService } from './reminders.service';
 
 @Injectable()
 export class RemindersCronJob {
@@ -10,14 +10,14 @@ export class RemindersCronJob {
     private readonly remindersService: RemindersService,
   ) {}
 
-  @Cron("0 8 * * *")
+  @Cron('0 8 * * *')
   async sendDailyReminders() {
     const dueTemplates = await this.transferTemplatesService.findDueToday();
 
     for (const template of dueTemplates) {
-      if (template.recurrenceType === "reminder") {
+      if (template.recurrenceType === 'reminder') {
         await this.remindersService.generateForTemplate(template.id);
-      } else if (template.recurrenceType === "automatic") {
+      } else if (template.recurrenceType === 'automatic') {
         if (template.lastAmount == null) continue;
         await this.transferTemplatesService.executeTransfer(template.userId, {
           templateId: template.id,
@@ -27,4 +27,3 @@ export class RemindersCronJob {
     }
   }
 }
-

@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Crea el schema "finance" y la tabla "accounts" dentro de él.
@@ -9,7 +9,7 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 export class CreateFinanceSchemaAndAccounts1765970000000
   implements MigrationInterface
 {
-  name = "CreateFinanceSchemaAndAccounts1765970000000";
+  name = 'CreateFinanceSchemaAndAccounts1765970000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`CREATE SCHEMA IF NOT EXISTS "finance"`);

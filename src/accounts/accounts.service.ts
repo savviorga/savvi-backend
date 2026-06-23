@@ -1,12 +1,9 @@
-import {
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import { CreateAccountDto } from "./dto/create-account.dto";
-import { UpdateAccountDto } from "./dto/update-account.dto";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { Account } from "./entities/account.entity";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { CreateAccountDto } from './dto/create-account.dto';
+import { UpdateAccountDto } from './dto/update-account.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Account } from './entities/account.entity';
 
 @Injectable()
 export class AccountsService {
@@ -31,7 +28,7 @@ export class AccountsService {
   findAll(userId: string): Promise<Account[]> {
     return this.accountRepository.find({
       where: { userId },
-      order: { name: "ASC" },
+      order: { name: 'ASC' },
     });
   }
 
@@ -40,7 +37,7 @@ export class AccountsService {
       where: { id, userId },
     });
     if (!account) {
-      throw new NotFoundException("Cuenta no encontrada");
+      throw new NotFoundException('Cuenta no encontrada');
     }
     return account;
   }
@@ -70,7 +67,9 @@ export class AccountsService {
       where: { id: accountId, userId },
     });
     if (!ok) {
-      throw new NotFoundException("Cuenta no encontrada o no pertenece al usuario");
+      throw new NotFoundException(
+        'Cuenta no encontrada o no pertenece al usuario',
+      );
     }
   }
 }

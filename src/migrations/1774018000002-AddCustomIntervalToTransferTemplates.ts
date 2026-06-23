@@ -1,9 +1,9 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddCustomIntervalToTransferTemplates1774018000002
   implements MigrationInterface
 {
-  name = "AddCustomIntervalToTransferTemplates1774018000002";
+  name = 'AddCustomIntervalToTransferTemplates1774018000002';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

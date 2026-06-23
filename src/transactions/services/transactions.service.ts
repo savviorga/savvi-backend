@@ -1,13 +1,13 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { CreateTransactionDto } from "../dto/create-transaction.dto";
-import { UpdateTransactionDto } from "../dto/update-transaction.dto";
-import { UploadedFileMetadataDto } from "../dto/confirm-upload.dto";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { Transaction } from "../entities/transaction.entity";
-import { Document } from "../entities/document.entity";
-import { S3Service } from "../../s3/s3.service";
-import { bucket } from "../../infrastructure/config/s3.config";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { CreateTransactionDto } from '../dto/create-transaction.dto';
+import { UpdateTransactionDto } from '../dto/update-transaction.dto';
+import { UploadedFileMetadataDto } from '../dto/confirm-upload.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Transaction } from '../entities/transaction.entity';
+import { Document } from '../entities/document.entity';
+import { S3Service } from '../../s3/s3.service';
+import { bucket } from '../../infrastructure/config/s3.config';
 
 @Injectable()
 export class TransactionsService {
@@ -48,7 +48,7 @@ export class TransactionsService {
   findAll(userId: string) {
     return this.transactionRepository.find({
       where: { userId },
-      order: { date: "DESC", id: "DESC" },
+      order: { date: 'DESC', id: 'DESC' },
     });
   }
 
@@ -57,7 +57,7 @@ export class TransactionsService {
       where: { id, userId },
     });
     if (!transaction) {
-      throw new NotFoundException("Transacción no encontrada");
+      throw new NotFoundException('Transacción no encontrada');
     }
     return transaction;
   }
@@ -68,7 +68,10 @@ export class TransactionsService {
     updateTransactionDto: UpdateTransactionDto,
   ) {
     await this.findOne(userId, id);
-    await this.transactionRepository.update({ id, userId }, updateTransactionDto);
+    await this.transactionRepository.update(
+      { id, userId },
+      updateTransactionDto,
+    );
     return this.findOne(userId, id);
   }
 
@@ -98,7 +101,7 @@ export class TransactionsService {
         size: file.size,
         bucket: result.bucket,
         keyS3: result.key,
-        module: "transactions",
+        module: 'transactions',
         refId: tx.id.toString(),
       });
 
@@ -141,11 +144,11 @@ export class TransactionsService {
 
     const documents = await this.documentRepository.find({
       where: {
-        module: "transactions",
+        module: 'transactions',
         refId: transactionId.toString(),
       },
       order: {
-        createdAt: "DESC",
+        createdAt: 'DESC',
       },
     });
 
@@ -154,10 +157,7 @@ export class TransactionsService {
         id: doc.id,
         name: doc.name,
         size: Number(doc.size),
-        url: await this.s3Service.getPresignedUrl(
-          doc.keyS3,
-          3600,
-        ),
+        url: await this.s3Service.getPresignedUrl(doc.keyS3, 3600),
       })),
     );
   }

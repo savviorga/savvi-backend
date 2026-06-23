@@ -1,11 +1,11 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Añade la columna "type" (ingreso | egreso) a la tabla categories.
  * Valor por defecto 'egreso' para filas existentes.
  */
 export class AddCategoryType1731612000000 implements MigrationInterface {
-  name = "AddCategoryType1731612000000";
+  name = 'AddCategoryType1731612000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // This migration runs early (by filename timestamp) but `categories` is

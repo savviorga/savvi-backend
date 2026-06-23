@@ -1,9 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateRemindersTable1774018000001
-  implements MigrationInterface
-{
-  name = "CreateRemindersTable1774018000001";
+export class CreateRemindersTable1774018000001 implements MigrationInterface {
+  name = 'CreateRemindersTable1774018000001';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -31,4 +29,3 @@ export class CreateRemindersTable1774018000001
     await queryRunner.query(`DROP TABLE IF EXISTS finance.reminders CASCADE;`);
   }
 }
-

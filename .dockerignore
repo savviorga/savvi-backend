@@ -1,0 +1,36 @@
+node_modules
+dist
+build
+coverage
+.nyc_output
+
+# Git / control de versiones
+.git
+.gitignore
+
+# Secretos y entorno (NUNCA dentro de la imagen)
+.env
+.env.*
+*.pem
+*.key
+
+# Bases de datos / dumps locales
+*.db
+*.sql
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editores / SO
+.vscode
+.idea
+.DS_Store
+
+# Docker / docs
+Dockerfile
+.dockerignore
+README.md
+front
+test

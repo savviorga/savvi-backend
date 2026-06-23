@@ -1,10 +1,10 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
-import { CreateCategoryDto } from "./dto/create-category.dto";
-import { UpdateCategoryDto } from "./dto/update-category.dto";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Category } from "./entities/category.entity";
-import { Repository } from "typeorm";
-import { UpdateBudgetDto } from "./dto/update-budget.dto";
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { CreateCategoryDto } from './dto/create-category.dto';
+import { UpdateCategoryDto } from './dto/update-category.dto';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Category } from './entities/category.entity';
+import { Repository } from 'typeorm';
+import { UpdateBudgetDto } from './dto/update-budget.dto';
 
 @Injectable()
 export class CategoriesService {
@@ -27,7 +27,7 @@ export class CategoriesService {
   findAll(userId: string): Promise<Category[]> {
     return this.categoryRepository.find({
       where: { userId },
-      order: { name: "ASC" },
+      order: { name: 'ASC' },
     });
   }
 
@@ -63,7 +63,7 @@ export class CategoriesService {
   ): Promise<Category> {
     const category = await this.findOne(userId, id);
 
-    if (typeof updateBudgetDto.budgetLimit === "number") {
+    if (typeof updateBudgetDto.budgetLimit === 'number') {
       category.budgetLimit = updateBudgetDto.budgetLimit;
     }
 

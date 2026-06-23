@@ -2,16 +2,16 @@ import {
   BadRequestException,
   Injectable,
   NotFoundException,
-} from "@nestjs/common";
-import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
-import { Budget } from "./entities/budget.entity";
-import { BudgetDetail } from "./entities/budget-detail.entity";
-import { CreateBudgetDto } from "./dto/create-budget.dto";
-import { UpdateBudgetDto } from "./dto/update-budget.dto";
-import { CreateBudgetDetailDto } from "./dto/create-budget-detail.dto";
-import { UpdateBudgetDetailDto } from "./dto/update-budget-detail.dto";
-import { CategoriesService } from "../categories/categories.service";
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Budget } from './entities/budget.entity';
+import { BudgetDetail } from './entities/budget-detail.entity';
+import { CreateBudgetDto } from './dto/create-budget.dto';
+import { UpdateBudgetDto } from './dto/update-budget.dto';
+import { CreateBudgetDetailDto } from './dto/create-budget-detail.dto';
+import { UpdateBudgetDetailDto } from './dto/update-budget-detail.dto';
+import { CategoriesService } from '../categories/categories.service';
 
 @Injectable()
 export class BudgetsService {
@@ -29,7 +29,7 @@ export class BudgetsService {
     const auto = dto.amountAutoCalculated === true;
     if (!auto && (!dto.amount || dto.amount <= 0)) {
       throw new BadRequestException(
-        "Indica un monto mayor a 0 o activá el cálculo automático desde partidas.",
+        'Indica un monto mayor a 0 o activá el cálculo automático desde partidas.',
       );
     }
 
@@ -76,7 +76,7 @@ export class BudgetsService {
   private async syncAmountFromDetailsIfNeeded(budgetId: string): Promise<void> {
     const budget = await this.budgetRepository.findOne({
       where: { id: budgetId },
-      relations: ["details"],
+      relations: ['details'],
     });
     if (!budget?.amountAutoCalculated) return;
     const sum = (budget.details ?? []).reduce((s, d) => {
@@ -89,21 +89,21 @@ export class BudgetsService {
 
   findAll(userId: string): Promise<Budget[]> {
     return this.budgetRepository
-      .createQueryBuilder("b")
-      .leftJoinAndSelect("b.category", "c")
-      .leftJoinAndSelect("b.details", "d")
-      .where("c.userId = :userId", { userId })
-      .orderBy("b.year", "DESC")
-      .addOrderBy("b.month", "DESC")
-      .addOrderBy("b.createdAt", "DESC")
-      .addOrderBy("d.sortOrder", "ASC")
+      .createQueryBuilder('b')
+      .leftJoinAndSelect('b.category', 'c')
+      .leftJoinAndSelect('b.details', 'd')
+      .where('c.userId = :userId', { userId })
+      .orderBy('b.year', 'DESC')
+      .addOrderBy('b.month', 'DESC')
+      .addOrderBy('b.createdAt', 'DESC')
+      .addOrderBy('d.sortOrder', 'ASC')
       .getMany();
   }
 
   async findOne(userId: string, id: string): Promise<Budget> {
     const budget = await this.budgetRepository.findOne({
       where: { id },
-      relations: ["category", "details"],
+      relations: ['category', 'details'],
     });
     if (!budget || budget.category?.userId !== userId) {
       throw new NotFoundException(`Presupuesto no encontrado`);
@@ -139,9 +139,9 @@ export class BudgetsService {
     let sortOrder = dto.sortOrder ?? 0;
     if (dto.sortOrder === undefined) {
       const row = await this.budgetDetailRepository
-        .createQueryBuilder("d")
-        .select("COALESCE(MAX(d.sortOrder), -1)", "max")
-        .where("d.budgetId = :budgetId", { budgetId })
+        .createQueryBuilder('d')
+        .select('COALESCE(MAX(d.sortOrder), -1)', 'max')
+        .where('d.budgetId = :budgetId', { budgetId })
         .getRawOne<{ max: string }>();
       sortOrder = Number(row?.max ?? -1) + 1;
     }
@@ -170,7 +170,7 @@ export class BudgetsService {
       where: { id: detailId, budgetId },
     });
     if (!detail) {
-      throw new NotFoundException("Partida no encontrada");
+      throw new NotFoundException('Partida no encontrada');
     }
     if (dto.label !== undefined) detail.label = dto.label;
     if (dto.description !== undefined) detail.description = dto.description;
@@ -195,7 +195,7 @@ export class BudgetsService {
       budgetId,
     });
     if (!res.affected) {
-      throw new NotFoundException("Partida no encontrada");
+      throw new NotFoundException('Partida no encontrada');
     }
     await this.syncAmountFromDetailsIfNeeded(budgetId);
   }

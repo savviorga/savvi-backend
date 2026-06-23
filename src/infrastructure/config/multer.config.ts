@@ -1,5 +1,5 @@
 // src/infrastructure/config/multer.config.ts
-import { MulterOptions } from "@nestjs/platform-express/multer/interfaces/multer-options.interface";
+import { MulterOptions } from '@nestjs/platform-express/multer/interfaces/multer-options.interface';
 import { memoryStorage } from 'multer';
 
 export const multerConfig: MulterOptions = {
@@ -14,6 +14,15 @@ export const multerConfig: MulterOptions = {
       'image/jpeg',
       'image/png',
       'image/jpg',
+      'image/webp',
+      'audio/mpeg',
+      'audio/mp3',
+      'audio/wav',
+      'audio/x-wav',
+      'audio/webm',
+      'audio/ogg',
+      'audio/mp4',
+      'audio/x-m4a',
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     ];
 

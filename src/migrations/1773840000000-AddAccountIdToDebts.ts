@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddAccountIdToDebts1773840000000 implements MigrationInterface {
-  name = "AddAccountIdToDebts1773840000000";
+  name = 'AddAccountIdToDebts1773840000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -57,4 +57,3 @@ export class AddAccountIdToDebts1773840000000 implements MigrationInterface {
     `);
   }
 }
-

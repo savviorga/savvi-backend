@@ -12,6 +12,7 @@ import { BudgetsModule } from './budgets/budgets.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { TransferTemplatesModule } from './transfer-templates/transfer-templates.module';
 import { WaitingListModule } from './waitinglist/waitinglist.module';
+import { AiRegisterModule } from './ai-register/ai-register.module';
 
 @Module({
   imports: [
@@ -25,8 +26,9 @@ import { WaitingListModule } from './waitinglist/waitinglist.module';
     BudgetsModule,
     TransferTemplatesModule,
     WaitingListModule,
+    AiRegisterModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

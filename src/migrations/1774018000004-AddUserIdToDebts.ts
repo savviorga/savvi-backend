@@ -1,13 +1,13 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Asocia cada deuda del planificador al usuario propietario (schema finance).
  */
 export class AddUserIdToDebts1774018000004 implements MigrationInterface {
-  name = "AddUserIdToDebts1774018000004";
+  name = 'AddUserIdToDebts1774018000004';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const schema = "finance";
+    const schema = 'finance';
 
     await queryRunner.query(`
       DO $$
@@ -66,7 +66,7 @@ export class AddUserIdToDebts1774018000004 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    const schema = "finance";
+    const schema = 'finance';
     await queryRunner.query(`
       ALTER TABLE "${schema}"."debts" DROP CONSTRAINT IF EXISTS "fk_debts_user_id";
       DROP INDEX IF EXISTS "${schema}"."idx_finance_debts_user_id";

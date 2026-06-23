@@ -1,4 +1,9 @@
-import { Injectable, InternalServerErrorException, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import {
   PutObjectCommand,
   GetObjectCommand,
@@ -43,7 +48,7 @@ export class S3Service implements OnModuleInit {
     } catch (error: any) {
       this.logger.warn(
         `No se pudo configurar CORS en bucket "${bucket}": ${error.message}. ` +
-        'Configúralo manualmente en la consola de AWS si la subida directa falla.',
+          'Configúralo manualmente en la consola de AWS si la subida directa falla.',
       );
     }
   }
@@ -53,9 +58,12 @@ export class S3Service implements OnModuleInit {
     file: Express.Multer.File,
   ): Promise<UploadS3Response> {
     try {
-      const fileBuffer = file.buffer || (file.path ? fs.readFileSync(file.path) : null);
+      const fileBuffer =
+        file.buffer || (file.path ? fs.readFileSync(file.path) : null);
       if (!fileBuffer) {
-        throw new Error('No se proporcionó buffer ni path para el archivo a subir');
+        throw new Error(
+          'No se proporcionó buffer ni path para el archivo a subir',
+        );
       }
       const contentType =
         mime.lookup(file.originalname) || 'application/octet-stream';
@@ -103,7 +111,10 @@ export class S3Service implements OnModuleInit {
       return result.Body as Readable;
     } catch (error) {
       console.error('Error descargando archivo:', error);
-      throw new InternalServerErrorException('Error al descargar el archivo:', error);
+      throw new InternalServerErrorException(
+        'Error al descargar el archivo:',
+        error,
+      );
     }
   }
 
@@ -123,7 +134,10 @@ export class S3Service implements OnModuleInit {
       return Buffer.concat(chunks);
     } catch (error) {
       console.error('Error descargando archivo:', error);
-      throw new InternalServerErrorException('Error al descargar el archivo:', error);
+      throw new InternalServerErrorException(
+        'Error al descargar el archivo:',
+        error,
+      );
     }
   }
 
@@ -135,10 +149,17 @@ export class S3Service implements OnModuleInit {
           Prefix: prefix,
         }),
       );
-      return (result.Contents?.map((obj) => obj.Key).filter((k): k is string => k != null)) ?? [];
+      return (
+        result.Contents?.map((obj) => obj.Key).filter(
+          (k): k is string => k != null,
+        ) ?? []
+      );
     } catch (error) {
       console.error('Error listando archivos:', error);
-      throw new InternalServerErrorException('Error al listar archivos:', error);
+      throw new InternalServerErrorException(
+        'Error al listar archivos:',
+        error,
+      );
     }
   }
 
@@ -234,10 +255,18 @@ export class S3Service implements OnModuleInit {
     return this.generatePresignedUrl(folder, fileName, 'getObject', expiresIn);
   }
 
-  async getPresignedUrl(relativePath: string, expiresIn: number = 3600): Promise<string> {
+  async getPresignedUrl(
+    relativePath: string,
+    expiresIn: number = 3600,
+  ): Promise<string> {
     const [folder, ...fileParts] = relativePath.split('/');
     const fileName = fileParts.join('/');
-    const presigned = await this.generatePresignedUrl(folder, fileName, 'getObject', expiresIn);
+    const presigned = await this.generatePresignedUrl(
+      folder,
+      fileName,
+      'getObject',
+      expiresIn,
+    );
     return presigned.url;
   }
 }

@@ -7,12 +7,9 @@ import { Document } from './entities/document.entity';
 import { S3Module } from '../s3/s3.module';
 
 @Module({
-  imports: [
-    TypeOrmModule.forFeature([Transaction, Document]),
-    S3Module,
-  ],
+  imports: [TypeOrmModule.forFeature([Transaction, Document]), S3Module],
   controllers: [TransactionsController],
   providers: [TransactionsService],
   exports: [TransactionsService],
 })
-export class TransactionsModule { }
+export class TransactionsModule {}

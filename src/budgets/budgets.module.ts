@@ -13,4 +13,3 @@ import { CategoriesModule } from '../categories/categories.module';
   exports: [BudgetsService],
 })
 export class BudgetsModule {}
-

@@ -1,9 +1,9 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class CreateTransferTemplatesTable1774018000000
   implements MigrationInterface
 {
-  name = "CreateTransferTemplatesTable1774018000000";
+  name = 'CreateTransferTemplatesTable1774018000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -40,4 +40,3 @@ export class CreateTransferTemplatesTable1774018000000
     );
   }
 }
-

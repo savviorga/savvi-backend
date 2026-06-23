@@ -17,4 +17,3 @@ export class AddBalanceToAccounts1773810000000 implements MigrationInterface {
     `);
   }
 }
-

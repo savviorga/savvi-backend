@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 /**
  * Asocia cuentas, categorías y transacciones al usuario propietario (schema finance).
@@ -7,10 +7,10 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 export class AddUserIdToAccountsCategoriesTransactions1774018000003
   implements MigrationInterface
 {
-  name = "AddUserIdToAccountsCategoriesTransactions1774018000003";
+  name = 'AddUserIdToAccountsCategoriesTransactions1774018000003';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    const schema = "finance";
+    const schema = 'finance';
 
     await queryRunner.query(`
       DO $$
@@ -121,7 +121,7 @@ export class AddUserIdToAccountsCategoriesTransactions1774018000003
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    const schema = "finance";
+    const schema = 'finance';
     await queryRunner.query(`
       ALTER TABLE "${schema}"."transactions" DROP CONSTRAINT IF EXISTS "fk_transactions_user_id";
       DROP INDEX IF EXISTS "${schema}"."idx_finance_transactions_user_id";

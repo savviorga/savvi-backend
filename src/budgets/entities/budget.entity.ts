@@ -51,4 +51,3 @@ export class Budget {
   @UpdateDateColumn()
   updatedAt: Date;
 }
-

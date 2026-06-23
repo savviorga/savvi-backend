@@ -29,10 +29,7 @@ export class CreateBudgetsTable1773800000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP INDEX IF EXISTS "UQ_budgets_category_month"`,
-    );
+    await queryRunner.query(`DROP INDEX IF EXISTS "UQ_budgets_category_month"`);
     await queryRunner.query(`DROP TABLE IF EXISTS "budgets"`);
   }
 }
-

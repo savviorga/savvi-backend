@@ -1,7 +1,7 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
 export class AddIsCreditToAccounts1773820000000 implements MigrationInterface {
-  name = "AddIsCreditToAccounts1773820000000";
+  name = 'AddIsCreditToAccounts1773820000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -57,4 +57,3 @@ export class AddIsCreditToAccounts1773820000000 implements MigrationInterface {
     `);
   }
 }
-

@@ -1,7 +1,9 @@
-import { MigrationInterface, QueryRunner } from "typeorm";
+import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateBudgetDetailsTable1774018000005 implements MigrationInterface {
-  name = "CreateBudgetDetailsTable1774018000005";
+export class CreateBudgetDetailsTable1774018000005
+  implements MigrationInterface
+{
+  name = 'CreateBudgetDetailsTable1774018000005';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
@@ -27,8 +29,6 @@ export class CreateBudgetDetailsTable1774018000005 implements MigrationInterface
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `DROP TABLE IF EXISTS "finance"."budget_details"`,
-    );
+    await queryRunner.query(`DROP TABLE IF EXISTS "finance"."budget_details"`);
   }
 }
