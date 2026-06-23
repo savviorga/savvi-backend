@@ -90,7 +90,7 @@ docker build -t savvi-backed .
 
 ```bash
 # Toma las variables del .env local
-docker run --name savvi-backed --env-file .env -p 3000:3000 savvi-backed
+docker run -d --name savvi-backed --env-file .env --restart unless-stopped -p 4051:3000 savvi-backed
 ```
 
 La API quedará en `http://localhost:3000` y Swagger en `http://localhost:3000/docs`.
@@ -101,7 +101,8 @@ Las variables de entorno se leen **al arrancar el contenedor**, no en caliente. 
 
 ```bash
 docker stop savvi-backed && docker rm savvi-backed
-docker run --name savvi-backed --env-file .env -p 3000:3000 savvi-backed
+docker run -d --name savvi-backed --env-file .env --restart unless-stopped -p 4051:3000 savvi-backed
+
 ```
 
 ### ¿Traje cambios nuevos del repositorio? (`git pull`)
@@ -113,7 +114,7 @@ git pull
 docker build -t savvi-backed .
 
 docker stop savvi-backed && docker rm savvi-backed
-docker run --name savvi-backed --env-file .env -p 3000:3000 savvi-backed
+docker run -d --name savvi-backed --env-file .env --restart unless-stopped -p 4051:3000 savvi-backed
 ```
 
 Si los cambios incluyen **migraciones de base de datos**, ejecútalas dentro del contenedor en ejecución:
