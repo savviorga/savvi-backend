@@ -64,6 +64,33 @@ npm run migration:run        # aplica las migraciones pendientes
 npm run migration:revert     # revierte la última migración
 ```
 
+## Datos de ejemplo (seed)
+
+```bash
+npm run seed            # puebla la base con ~5.100 registros de ejemplo
+npm run seed -- --purge # vacía TODAS las tablas antes de sembrar
+```
+
+Genera un escenario completo y coherente: 5 usuarios con perfiles distintos
+(empleado, freelance, comerciante, docente y practicante), sus cuentas y
+categorías, ~24 meses de transacciones con comercios y montos reales en pesos,
+presupuestos por mes con partidas, deudas con abonos enlazados a su transacción,
+plantillas de transferencia con recordatorios, adjuntos y jobs de IA.
+
+- **Determinista:** la misma semilla produce siempre los mismos datos.
+- **Repetible:** antes de sembrar borra lo de la corrida anterior (los usuarios
+  con dominio `@savvi.demo`), así nunca duplica. El resto de la base no se toca,
+  salvo que uses `--purge`.
+- **Usuarios de prueba:** `juan.hernandez@savvi.demo`, `valentina.rios@savvi.demo`,
+  `andres.mejia@savvi.demo`, `laura.gomez@savvi.demo`, `santiago.castano@savvi.demo`
+  — todos con la contraseña `Savvi2026*`.
+
+> Los adjuntos son registros en `documents` de archivos que no existen en S3: la
+> lista de documentos funciona, pero descargar la URL prefirmada responde 404.
+
+Apunta a la base del `.env`, así que revisa `DB_NAME` antes de ejecutarlo. Si las
+tablas no existen, corre primero `npm run migration:run`.
+
 ## Build
 
 ```bash
@@ -149,6 +176,7 @@ src/
 ├── s3/                   # URLs prefirmadas para S3
 ├── ai-register/          # Registro asistido por IA
 ├── config/               # Configuración (TypeORM, etc.)
+├── seeds/                # Seeder de datos de ejemplo (npm run seed)
 ├── infrastructure/       # Código transversal / utilidades
 ├── migrations/           # Migraciones de base de datos
 └── main.ts               # Bootstrap de la aplicación

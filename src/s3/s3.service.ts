@@ -9,6 +9,8 @@ import {
   GetObjectCommand,
   ListObjectsV2Command,
   PutBucketCorsCommand,
+  DeleteObjectCommand,
+  DeleteObjectsCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Client, bucket } from '../infrastructure/config/s3.config';
@@ -160,6 +162,55 @@ export class S3Service implements OnModuleInit {
         'Error al listar archivos:',
         error,
       );
+    }
+  }
+
+  /**
+   * Elimina un objeto del bucket a partir de su key completa.
+   */
+  async deleteFile(key: string): Promise<void> {
+    try {
+      await s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: bucket,
+          Key: key,
+        }),
+      );
+      this.logger.log(`Archivo eliminado de S3: ${key}`);
+    } catch (error) {
+      console.error('Error eliminando archivo:', error);
+      throw new InternalServerErrorException({
+        message: 'Error al eliminar el archivo de S3',
+        detail: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Elimina varios objetos del bucket en una sola petición (máx. 1000 keys).
+   */
+  async deleteFiles(keys: string[]): Promise<void> {
+    if (!keys.length) {
+      return;
+    }
+
+    try {
+      await s3Client.send(
+        new DeleteObjectsCommand({
+          Bucket: bucket,
+          Delete: {
+            Objects: keys.map((Key) => ({ Key })),
+            Quiet: true,
+          },
+        }),
+      );
+      this.logger.log(`Archivos eliminados de S3: ${keys.length}`);
+    } catch (error) {
+      console.error('Error eliminando archivos:', error);
+      throw new InternalServerErrorException({
+        message: 'Error al eliminar los archivos de S3',
+        detail: error instanceof Error ? error.message : String(error),
+      });
     }
   }
 

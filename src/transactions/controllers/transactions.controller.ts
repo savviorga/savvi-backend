@@ -129,14 +129,23 @@ export class TransactionsController {
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: 'Actualizar parcialmente una transacción' })
+  @ApiOperation({
+    summary: 'Editar una transacción (campos y adjuntos)',
+    description:
+      'Actualiza parcialmente los campos de la transacción. Además, en la misma ' +
+      'petición permite eliminar adjuntos existentes (documentsToDelete) y ' +
+      'vincular archivos nuevos ya subidos a S3 por URL prefirmada (filesToAdd). ' +
+      'Devuelve la transacción actualizada con el listado de documentos vigentes.',
+  })
   @ApiParam({
     name: 'id',
     description: 'ID (UUID) de la transacción',
     format: 'uuid',
   })
   @ApiOkResponse({ description: 'Transacción actualizada' })
-  @ApiNotFoundResponse({ description: 'La transacción no existe' })
+  @ApiNotFoundResponse({
+    description: 'La transacción o alguno de los documentos no existe',
+  })
   @ApiBadRequestResponse({ description: 'Datos inválidos' })
   update(
     @Req() req: Request,
@@ -148,7 +157,11 @@ export class TransactionsController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Eliminar una transacción' })
+  @ApiOperation({
+    summary: 'Eliminar una transacción',
+    description:
+      'Elimina la transacción junto con todos sus adjuntos (S3 y base de datos).',
+  })
   @ApiParam({
     name: 'id',
     description: 'ID (UUID) de la transacción',
@@ -223,5 +236,76 @@ export class TransactionsController {
       dto.transactionId,
       dto.files,
     );
+  }
+
+  @Post(':id/documents')
+  @UseInterceptors(FilesInterceptor('files', 10, multerConfig))
+  @ApiOperation({
+    summary: 'Agregar archivos a una transacción existente',
+    description:
+      'Sube hasta 10 archivos nuevos y los vincula a la transacción indicada. ' +
+      'Pensado para el flujo de edición; el backend los reenvía a S3.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID (UUID) de la transacción',
+    format: 'uuid',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Archivos a vincular a la transacción',
+    schema: {
+      type: 'object',
+      required: ['files'],
+      properties: {
+        files: {
+          type: 'array',
+          items: { type: 'string', format: 'binary' },
+          description: 'Archivos (máx. 10)',
+        },
+      },
+    },
+  })
+  @ApiCreatedResponse({ description: 'Archivos subidos y documentos creados' })
+  @ApiNotFoundResponse({ description: 'La transacción no existe' })
+  @ApiBadRequestResponse({
+    description: 'Datos inválidos o archivos no aceptados',
+  })
+  addDocuments(
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.uploadTransactionFiles(userId, id, files);
+  }
+
+  @Delete(':id/documents/:documentId')
+  @ApiOperation({
+    summary: 'Eliminar un archivo adjunto de una transacción',
+    description:
+      'Borra el documento del bucket S3 y su registro en la base de datos.',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID (UUID) de la transacción',
+    format: 'uuid',
+  })
+  @ApiParam({
+    name: 'documentId',
+    description: 'ID (UUID) del documento a eliminar',
+    format: 'uuid',
+  })
+  @ApiOkResponse({ description: 'Documento eliminado' })
+  @ApiNotFoundResponse({
+    description: 'La transacción o el documento no existe',
+  })
+  removeDocument(
+    @Req() req: Request,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+  ) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.transactionsService.removeDocument(userId, id, documentId);
   }
 }
