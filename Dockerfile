@@ -1,9 +1,13 @@
 # syntax=docker/dockerfile:1
 
 ###############################################################################
-# Stage 1 - production dependencies (con módulos nativos compilados para musl)
+# Stage 1 - build (instala dependencias y compila TypeScript -> dist/)
 ###############################################################################
-FROM node:22-alpine AS deps
+# Un solo `npm ci` para todo. Antes había dos etapas independientes —una con
+# las dependencias de producción y otra con el árbol completo— que BuildKit
+# lanzaba EN PARALELO: dos instalaciones de node_modules escribiendo en el
+# mismo disco a la vez, y el árbol entero por duplicado.
+FROM node:22-alpine AS builder
 WORKDIR /app
 
 # Toolchain solo para compilar dependencias nativas (bcrypt, pg). No queda
@@ -11,26 +15,24 @@ WORKDIR /app
 RUN apk add --no-cache python3 make g++
 
 COPY package*.json ./
-
-# Solo dependencias de producción + tsconfig-paths (lo requiere register-paths.js
-# en runtime). Reproducible gracias a package-lock.json.
-RUN npm ci --omit=dev \
- && npm install --no-save tsconfig-paths@^4.2.0 \
- && npm cache clean --force
-
-###############################################################################
-# Stage 2 - build (compila TypeScript -> dist/)
-###############################################################################
-FROM node:22-alpine AS builder
-WORKDIR /app
-
-RUN apk add --no-cache python3 make g++
-
-COPY package*.json ./
-RUN npm ci
+# Reproducible gracias a package-lock.json. La caché de npm sobrevive entre
+# builds (no se vuelve a descargar todo) y `sharing=locked` hace que dos builds
+# simultáneos se turnen en vez de saturar el disco a la vez.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked npm ci
 
 COPY . .
 RUN npm run build
+
+###############################################################################
+# Stage 2 - dependencias de producción
+###############################################################################
+# Se RECORTA el árbol ya instalado en vez de instalarlo otra vez: los módulos
+# nativos siguen compilados para musl y no hay una segunda descarga. Lo que
+# el runtime necesita de las antiguas devDependencies —tsconfig-paths, que
+# carga register-paths.js— está declarado como dependencia de producción en
+# package.json, así que sobrevive al recorte.
+FROM builder AS prod-deps
+RUN npm prune --omit=dev
 
 ###############################################################################
 # Stage 3 - runtime (imagen final mínima)
@@ -47,8 +49,8 @@ ENV NODE_ENV=production \
 WORKDIR /app
 
 # Solo lo necesario para ejecutar.
-COPY --from=deps    /app/node_modules        ./node_modules
-COPY --from=builder /app/dist                ./dist
+COPY --from=prod-deps /app/node_modules        ./node_modules
+COPY --from=builder   /app/dist                ./dist
 COPY package.json register-paths.js ./
 
 # Ejecutar como usuario sin privilegios (ya existe en la imagen oficial).

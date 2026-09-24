@@ -47,11 +47,39 @@ export class TransactionsService {
     };
   }
 
-  findAll(userId: string) {
-    return this.transactionRepository.find({
-      where: { userId },
-      order: { date: 'DESC', id: 'DESC' },
-    });
+  /**
+   * Listado del usuario con `documentsCount` por transacción, para que el front
+   * marque las que tienen adjuntos sin pedir los documentos de cada una.
+   */
+  async findAll(userId: string) {
+    const [transactions, counts] = await Promise.all([
+      this.transactionRepository.find({
+        where: { userId },
+        order: { date: 'DESC', id: 'DESC' },
+      }),
+      this.documentRepository
+        .createQueryBuilder('document')
+        .innerJoin(
+          Transaction,
+          'transaction',
+          'CAST(transaction.id AS text) = document.refId',
+        )
+        .select('document.refId', 'refId')
+        .addSelect('COUNT(*)', 'count')
+        .where('document.module = :module', { module: DOCUMENT_MODULE })
+        .andWhere('transaction.userId = :userId', { userId })
+        .groupBy('document.refId')
+        .getRawMany<{ refId: string; count: string }>(),
+    ]);
+
+    const countByTransaction = new Map(
+      counts.map((row) => [row.refId, Number(row.count)]),
+    );
+
+    return transactions.map((transaction) => ({
+      ...transaction,
+      documentsCount: countByTransaction.get(transaction.id) ?? 0,
+    }));
   }
 
   async findOne(userId: string, id: string): Promise<Transaction> {
