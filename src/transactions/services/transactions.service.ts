@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { UploadedFileMetadataDto } from '../dto/confirm-upload.dto';
@@ -10,6 +14,8 @@ import { S3Service } from '../../s3/s3.service';
 import { bucket } from '../../infrastructure/config/s3.config';
 
 const DOCUMENT_MODULE = 'transactions';
+/** Tope por petición de `POST /transactions/bulk`: el cliente envía lotes más pequeños en cola. */
+const MAX_BULK_ITEMS = 200;
 
 @Injectable()
 export class TransactionsService {
@@ -36,6 +42,15 @@ export class TransactionsService {
     userId: string,
     createTransactionsDto: CreateTransactionDto[],
   ) {
+    if (createTransactionsDto.length === 0) {
+      throw new BadRequestException('Envía al menos una transacción');
+    }
+    if (createTransactionsDto.length > MAX_BULK_ITEMS) {
+      throw new BadRequestException(
+        `Máximo ${MAX_BULK_ITEMS} transacciones por petición`,
+      );
+    }
+    // `save` con un arreglo usa una sola transacción: se guardan todas o ninguna.
     const transactions = this.transactionRepository.create(
       createTransactionsDto.map((row) => ({ ...row, userId })),
     );

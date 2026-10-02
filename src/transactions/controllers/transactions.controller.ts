@@ -4,6 +4,7 @@ import {
   Delete,
   Get,
   Param,
+  ParseArrayPipe,
   ParseUUIDPipe,
   Patch,
   Post,
@@ -64,7 +65,8 @@ export class TransactionsController {
   @Post('bulk')
   @ApiOperation({
     summary: 'Crear transacciones en lote',
-    description: 'Crea múltiples transacciones en una sola petición.',
+    description:
+      'Crea hasta 200 transacciones en una sola petición. Se guardan todas o ninguna.',
   })
   @ApiBody({
     description: 'Arreglo de transacciones a crear',
@@ -77,7 +79,15 @@ export class TransactionsController {
   @ApiBadRequestResponse({ description: 'Datos inválidos' })
   createBulk(
     @Req() req: Request,
-    @Body() createTransactionsDto: CreateTransactionDto[],
+    // El ValidationPipe global no valida los elementos de un arreglo.
+    @Body(
+      new ParseArrayPipe({
+        items: CreateTransactionDto,
+        whitelist: true,
+        forbidNonWhitelisted: false,
+      }),
+    )
+    createTransactionsDto: CreateTransactionDto[],
   ) {
     const userId = (req.user as { userId: string }).userId;
     return this.transactionsService.createBulk(userId, createTransactionsDto);
