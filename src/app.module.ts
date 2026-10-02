@@ -13,6 +13,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { TransferTemplatesModule } from './transfer-templates/transfer-templates.module';
 import { WaitingListModule } from './waitinglist/waitinglist.module';
 import { AiRegisterModule } from './ai-register/ai-register.module';
+import { ProfileModule } from './profile/profile.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { AiRegisterModule } from './ai-register/ai-register.module';
     TransferTemplatesModule,
     WaitingListModule,
     AiRegisterModule,
+    ProfileModule,
   ],
   controllers: [AppController],
   providers: [AppService],

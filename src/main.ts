@@ -30,6 +30,7 @@ async function bootstrap() {
       'JWT',
     )
     .addTag('auth', 'Registro, login y emisión de JWT')
+    .addTag('profile', 'Perfil del usuario y resumen de métricas')
     .addTag('accounts', 'Gestión de cuentas del usuario')
     .addTag('categories', 'Categorías de ingreso/egreso')
     .addTag('budgets', 'Presupuestos mensuales y partidas')

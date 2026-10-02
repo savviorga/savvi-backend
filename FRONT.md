@@ -40,6 +40,69 @@ Guarda `access_token` y mándalo en el header de todo lo demás.
 
 ---
 
+## Profile
+
+| Método  | Ruta                | Body / notas |
+| ------- | ------------------- | ------------ |
+| `GET`   | `/profile`          | Datos del usuario: `{ id, name, email, createdAt, updatedAt }` (nunca la contraseña) |
+| `PATCH` | `/profile`          | Parcial: `name?`, `email?` → perfil actualizado. Email ya usado por otro → `409` |
+| `PATCH` | `/profile/password` | `currentPassword`, `newPassword` (≥6) → `{ message }`. Actual incorrecta → `401`; igual a la actual → `400` |
+| `GET`   | `/profile/summary`  | Resumen general y métricas (ver abajo) |
+
+> El token sigue siendo válido tras cambiar email o contraseña: no hace falta re-loguear.
+
+### Resumen (`GET /profile/summary`)
+
+Todos los montos llegan ya como `number` (redondeados a 2 decimales). Tipos de transacción: `ingreso`, `egreso`, `transferencia`.
+
+```jsonc
+{
+  "user": { "id", "name", "email", "createdAt", "updatedAt" },
+  "memberSince": "2019-11-05T09:53:39.000Z",
+  "daysActive": 2518,
+  "transactions": {
+    "count": 1210, "incomeCount": 11, "expenseCount": 1199, "transferCount": 0,
+    "withAttachments": 0,          // transacciones con al menos un adjunto
+    "firstDate": "2019-11-01",     // null si no hay transacciones
+    "lastDate": "2025-12-01",
+    "activeMonths": 54             // meses distintos con movimientos
+  },
+  "totals": {
+    "income": 12468000, "expense": 78836653.13, "transfer": 0,
+    "net": -66368653.13,           // income - expense
+    "savingsRate": -532.31         // % de ahorro; null si no hay ingresos
+  },
+  "averages": {
+    "monthlyIncome": 230888.89,    // sobre activeMonths
+    "monthlyExpense": 1459938.02,
+    "expensePerTransaction": 65752
+  },
+  "currentMonth": { "month": "2026-09", "count": 0, "income": 0, "expense": 0, "net": 0 },
+  "monthly": [                     // últimos 12 meses, del más antiguo al actual; meses vacíos en 0
+    { "month": "2025-10", "income": 0, "expense": 2754946, "net": -2754946, "count": 33 }
+  ],
+  "topExpenseCategories": [        // top 5 por monto gastado
+    { "category": "Gasto Fijo", "total": 17707869.13, "count": 62 }
+  ],
+  "documents": { "count": 0 },
+  "accounts": { "count": 1, "active": 1, "credit": 0, "totalBalance": 0, "totalCreditLimit": 0 },
+  "categories": { "count": 29, "income": 1, "expense": 28 },
+  "budgets": { "count": 0, "currentMonth": 0, "currentMonthAmount": 0 },
+  "debts": {
+    "count": 0, "pending": 0, "paid": 0,
+    "overdue": 0,                  // pendientes con dueDate pasada
+    "totalRemaining": 0,           // saldo por pagar de las pendientes
+    "totalPaid": 0, "paymentsCount": 0
+  },
+  "transferTemplates": { "count": 0, "active": 0 },
+  "aiRegister": { "count": 0, "completed": 0, "failed": 0 }
+}
+```
+
+- `monthly` sirve directo para un gráfico de barras ingresos vs. egresos.
+- `accounts.totalBalance` suma solo cuentas que **no** son de crédito.
+- Es una sola llamada que agrega todo: pídelo al entrar a la pantalla de perfil, no en cada render.
+
 ## Accounts
 
 | Método   | Ruta             | Body / notas |
@@ -204,8 +267,9 @@ Valida tipo y tamaño en el cliente antes de pedir la URL. Las `url` de descarga
 | Código | Cuándo |
 | ------ | ------ |
 | `400`  | Validación fallida (monto, fecha, UUID, tipo de archivo) |
-| `401`  | Falta el token o expiró |
+| `401`  | Falta el token o expiró (o contraseña actual incorrecta en `/profile/password`) |
 | `404`  | No existe o no pertenece al usuario del token |
+| `409`  | Email ya registrado (`/auth/register`, `PATCH /profile`) |
 | `500`  | Error contra S3 |
 
 ```json
