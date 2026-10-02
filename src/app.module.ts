@@ -14,11 +14,13 @@ import { TransferTemplatesModule } from './transfer-templates/transfer-templates
 import { WaitingListModule } from './waitinglist/waitinglist.module';
 import { AiRegisterModule } from './ai-register/ai-register.module';
 import { ProfileModule } from './profile/profile.module';
+import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot(dataSourceOptions),
     ScheduleModule.forRoot(),
+    EmailModule,
     AuthModule,
     TransactionsModule,
     CategoriesModule,

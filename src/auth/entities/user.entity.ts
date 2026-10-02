@@ -20,6 +20,9 @@ export class User {
   @Column({ type: 'varchar', length: 255 })
   password: string;
 
+  @Column({ type: 'boolean', default: false })
+  twoFactorEnabled: boolean;
+
   @CreateDateColumn()
   createdAt: Date;
 

@@ -22,9 +22,57 @@ Content-Type: application/json
 | Método | Ruta             | Body                            | Respuesta                  |
 | ------ | ---------------- | ------------------------------- | -------------------------- |
 | `POST` | `/auth/register` | `name`, `email`, `password` (≥6) | `{ user, access_token }`   |
-| `POST` | `/auth/login`    | `email`, `password`              | `{ user, access_token }`   |
+| `POST` | `/auth/login`    | `email`, `password`              | `{ requiresTwoFactor: false, user, access_token }` o, con 2FA, `{ requiresTwoFactor: true, twoFactorToken, expiresIn }` |
+| `POST` | `/auth/2fa/verify` | `twoFactorToken`, `code`       | `{ user, access_token }` |
+| `POST` | `/auth/2fa/resend` | `twoFactorToken`               | `{ message, expiresIn }` |
+| `POST` | `/auth/forgot-password`   | `email`                       | `{ message }` |
+| `POST` | `/auth/verify-reset-code` | `email`, `code` (6 dígitos)   | `{ resetToken, expiresIn }` |
+| `POST` | `/auth/reset-password`    | `resetToken`, `newPassword` (≥6) | `{ message }` |
 
 Guarda `access_token` y mándalo en el header de todo lo demás.
+
+### Login con verificación en dos pasos (2FA)
+
+Si el usuario tiene el 2FA activo, `POST /auth/login` **no devuelve `access_token`**: envía un código de 6 dígitos al email y responde `{ requiresTwoFactor: true, twoFactorToken, expiresIn }`. Decide la pantalla con `requiresTwoFactor`:
+
+```ts
+const res = await api.post('/auth/login', { email, password });
+if (res.requiresTwoFactor) {
+  // pantalla "Ingresa el código que enviamos a tu email"
+  const { user, access_token } = await api.post('/auth/2fa/verify', {
+    twoFactorToken: res.twoFactorToken, code,
+  });
+} else {
+  const { user, access_token } = res;
+}
+```
+
+- Guarda `twoFactorToken` en memoria (no en `localStorage`). No es un JWT: no lo mandes en `Authorization`.
+- El código vence en **10 min**. **Máx. 5 intentos**: cada fallo responde `400` con `"Código incorrecto. Te quedan N intentos."` (muestra el `message`).
+- **Reenviar**: `POST /auth/2fa/resend { twoFactorToken }`. Deshabilita el botón **60 s** (antes → `429`). Máx. 5 envíos por login. El código anterior deja de servir.
+- Si responde `400` con *"El inicio de sesión expiró…"*, *"Demasiados intentos. Vuelve a iniciar sesión."* o *"límite de reenvíos"* → vuelve al formulario de login.
+- Volver a hacer login con 2FA antes de 60 s desde el último código → `429`: evita el doble submit del botón.
+
+### Recuperar contraseña (3 pantallas)
+
+1. **Pedir código** → `POST /auth/forgot-password { email }`. Siempre responde `200` con el mismo mensaje, exista o no la cuenta: muestra “Si el email está registrado, te llegará un código” y pasa a la pantalla 2 **guardando el email**.
+2. **Ingresar código** → `POST /auth/verify-reset-code { email, code }` → `{ resetToken, expiresIn }`. Guarda `resetToken` en memoria (no en `localStorage`) y pasa a la pantalla 3.
+3. **Nueva contraseña** → `POST /auth/reset-password { resetToken, newPassword }` → `{ message }`. Lleva al login: **no devuelve `access_token`**, el usuario inicia sesión con la nueva contraseña.
+
+```ts
+await api.post('/auth/forgot-password', { email });
+const { resetToken } = await api.post('/auth/verify-reset-code', { email, code });
+await api.post('/auth/reset-password', { resetToken, newPassword });
+```
+
+Reglas para la UI:
+
+- El código es de **6 dígitos** (input numérico, `maxLength=6`) y vence en **15 min**.
+- **Máx. 5 intentos** por código. Un fallo responde `400` con `"Código incorrecto. Te quedan N intentos."`; muestra ese `message` tal cual. Al agotarlos (o si venció) → `400` y hay que pedir otro código.
+- **Reenviar código**: vuelve a llamar `forgot-password`. Deshabilita el botón **60 s** (antes de eso el backend no reenvía, aunque responda `200`). Pedir uno nuevo invalida el anterior.
+- `resetToken` vale **15 min** y **un solo uso**. Si `reset-password` responde `400` por token inválido/expirado, vuelve a la pantalla 1.
+- `resetToken` no es un JWT de sesión: no lo mandes en `Authorization`.
+- `500` en `forgot-password` = no se pudo enviar el email; muestra “intenta más tarde”.
 
 ## Waitinglist *(público)*
 
@@ -44,10 +92,24 @@ Guarda `access_token` y mándalo en el header de todo lo demás.
 
 | Método  | Ruta                | Body / notas |
 | ------- | ------------------- | ------------ |
-| `GET`   | `/profile`          | Datos del usuario: `{ id, name, email, createdAt, updatedAt }` (nunca la contraseña) |
+| `GET`   | `/profile`          | Datos del usuario: `{ id, name, email, twoFactorEnabled, createdAt, updatedAt }` (nunca la contraseña) |
 | `PATCH` | `/profile`          | Parcial: `name?`, `email?` → perfil actualizado. Email ya usado por otro → `409` |
 | `PATCH` | `/profile/password` | `currentPassword`, `newPassword` (≥6) → `{ message }`. Actual incorrecta → `401`; igual a la actual → `400` |
 | `GET`   | `/profile/summary`  | Resumen general y métricas (ver abajo) |
+
+### Verificación en dos pasos (ajustes de seguridad)
+
+Requieren JWT. El estado actual viene en `twoFactorEnabled` de `GET /profile`.
+
+| Método | Ruta                       | Body       | Respuesta |
+| ------ | -------------------------- | ---------- | --------- |
+| `POST` | `/auth/2fa/enable`         | —          | `{ message, expiresIn }`: envía un código al email del usuario |
+| `POST` | `/auth/2fa/enable/confirm` | `code`     | `{ message, twoFactorEnabled: true }` |
+| `POST` | `/auth/2fa/disable`        | `password` | `{ message, twoFactorEnabled: false }` |
+
+- **Activar**: toggle → `enable` → pide el código en un modal → `enable/confirm`. Hasta confirmar, el 2FA **no** queda activo. Para reenviar, llama otra vez a `enable` (cada 60 s, si no `429`).
+- **Desactivar**: pide la contraseña actual. Incorrecta → `401`.
+- `enable` con el 2FA ya activo, o `disable` sin tenerlo → `400`.
 
 > El token sigue siendo válido tras cambiar email o contraseña: no hace falta re-loguear.
 
@@ -266,11 +328,12 @@ Valida tipo y tamaño en el cliente antes de pedir la URL. Las `url` de descarga
 
 | Código | Cuándo |
 | ------ | ------ |
-| `400`  | Validación fallida (monto, fecha, UUID, tipo de archivo) |
-| `401`  | Falta el token o expiró (o contraseña actual incorrecta en `/profile/password`) |
+| `400`  | Validación fallida (monto, fecha, UUID, tipo de archivo); código 2FA / de recuperación o `resetToken` inválido/expirado |
+| `401`  | Falta el token o expiró (o contraseña incorrecta en `/profile/password` y `/auth/2fa/disable`) |
 | `404`  | No existe o no pertenece al usuario del token |
 | `409`  | Email ya registrado (`/auth/register`, `PATCH /profile`) |
-| `500`  | Error contra S3 |
+| `429`  | Se pidió otro código 2FA antes de 60 s |
+| `500`  | Error contra S3 o al enviar un email |
 
 ```json
 { "statusCode": 404, "message": "Transacción no encontrada", "error": "Not Found" }

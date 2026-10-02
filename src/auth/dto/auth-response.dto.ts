@@ -13,6 +13,12 @@ export class AuthUserDto {
   })
   email: string;
 
+  @ApiProperty({
+    description: 'Si tiene activa la verificación en dos pasos',
+    example: false,
+  })
+  twoFactorEnabled: boolean;
+
   @ApiProperty({ description: 'Fecha de creación' })
   createdAt: Date;
 
