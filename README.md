@@ -30,6 +30,7 @@ DB_PORT=5432
 DB_USERNAME=postgres
 DB_PASSWORD=tu_password
 DB_NAME=savvi
+# DB_SSL=false   # opcional, ver nota abajo
 
 # AWS S3
 AWS_ACCESS_KEY_ID=...
@@ -39,6 +40,14 @@ AWS_S3_BUCKET=savvi-bucket
 ```
 
 > El `.env` está excluido de Git y de la imagen Docker. Nunca lo subas al repositorio.
+
+### SSL de la base de datos (`DB_SSL`)
+
+- **Sin definir:** se usa SSL automáticamente si `DB_HOST` no es `localhost` ni `127.0.0.1`.
+- **`DB_SSL=true` o `1`:** fuerza SSL.
+- **`DB_SSL=false` o `0`:** desactiva SSL, aunque el host sea remoto.
+
+Si al desplegar aparece `The server does not support SSL connections`, el Postgres de ese entorno no tiene SSL: agrega `DB_SSL=false` en las variables del despliegue.
 
 ## Instalación
 

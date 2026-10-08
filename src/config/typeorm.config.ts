@@ -3,12 +3,14 @@ import { config } from 'dotenv';
 
 config(); // carga .env
 
-// SSL por defecto para hosts remotos (evita "no encryption" en servidores que lo exigen)
+// DB_SSL manda si está definida; si no, SSL por defecto para hosts remotos
+// (evita "no encryption" en servidores que lo exigen)
 const host = process.env.DB_HOST ?? '';
+const sslEnv = process.env.DB_SSL?.toLowerCase();
 const useSsl =
-  process.env.DB_SSL === 'true' ||
-  process.env.DB_SSL === '1' ||
-  (host !== 'localhost' && host !== '127.0.0.1' && host !== '');
+  sslEnv !== undefined
+    ? sslEnv === 'true' || sslEnv === '1'
+    : host !== 'localhost' && host !== '127.0.0.1' && host !== '';
 
 export const dataSourceOptions: DataSourceOptions = {
   type: 'postgres',
