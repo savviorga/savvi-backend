@@ -65,6 +65,15 @@ export class AuthService {
     return this.createSession(user);
   }
 
+  /** Emite un JWT nuevo para un usuario con sesión vigente (sesión deslizante). */
+  async refreshSession(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    return this.createSession(user);
+  }
+
   private createSession(user: User) {
     const access_token = this.jwtService.sign({
       sub: user.id,

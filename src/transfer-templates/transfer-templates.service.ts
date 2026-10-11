@@ -54,6 +54,7 @@ export class TransferTemplatesService {
       userId,
       fromAccountId: dto.fromAccountId,
       name: dto.name,
+      description: dto.description?.trim() || null,
       payeeName: dto.payeeName,
       payeeAccount: dto.payeeAccount ?? null,
       payeeBank: dto.payeeBank ?? null,
@@ -103,6 +104,9 @@ export class TransferTemplatesService {
       template.fromAccountId = dto.fromAccountId;
     }
     if (dto.name !== undefined) template.name = dto.name;
+    if (dto.description !== undefined) {
+      template.description = dto.description?.trim() || null;
+    }
     if (dto.payeeName !== undefined) template.payeeName = dto.payeeName;
     if (dto.payeeAccount !== undefined) {
       template.payeeAccount = dto.payeeAccount?.trim() || null;
@@ -155,6 +159,22 @@ export class TransferTemplatesService {
       );
     }
 
+    // Fecha elegida por el usuario: gana sobre la recalculada.
+    if (dto.nextDueDate !== undefined) {
+      const [year, month, day] = dto.nextDueDate.split('-').map(Number);
+      // Constructor local: la columna `date` se guarda con los componentes
+      // locales, así que `new Date('YYYY-MM-DD')` (UTC) podría correr un día.
+      const due = new Date(year, month - 1, day);
+      if (
+        due.getFullYear() !== year ||
+        due.getMonth() !== month - 1 ||
+        due.getDate() !== day
+      ) {
+        throw new BadRequestException('La fecha de vencimiento no es válida');
+      }
+      template.nextDueDate = due;
+    }
+
     template.updatedAt = new Date();
     return this.templateRepository.save(template);
   }
@@ -203,11 +223,19 @@ export class TransferTemplatesService {
       `Pago recurrente: ${template.name} (${template.payeeName})`;
     const description = truncate(`${baseDescription} (${tag})`, 500);
 
+    const type = dto.transactionType ?? 'egreso';
+    // El nombre de la plantilla ya no hace de categoría: se agrupan en una propia.
+    const category = await this.transactionsService.findOrCreateCategory(
+      template.userId,
+      type === 'ingreso' ? 'Ingresos recurrentes' : 'Pagos recurrentes',
+      type === 'ingreso' ? 'ingreso' : 'egreso',
+    );
+
     const transactionPayload: CreateTransactionDto = {
       date: new Date().toISOString().slice(0, 10),
-      type: dto.transactionType ?? 'egreso',
+      type,
       amount,
-      category: truncate(template.name || 'Transferencia', 100),
+      categoryId: category.id,
       account: template.fromAccountId,
       description,
     };

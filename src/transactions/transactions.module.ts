@@ -5,9 +5,13 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { Transaction } from './entities/transaction.entity';
 import { Document } from './entities/document.entity';
 import { S3Module } from '../s3/s3.module';
+import { Category } from '../categories/entities/category.entity';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Transaction, Document]), S3Module],
+  imports: [
+    TypeOrmModule.forFeature([Transaction, Document, Category]),
+    S3Module,
+  ],
   controllers: [TransactionsController],
   providers: [TransactionsService],
   exports: [TransactionsService],

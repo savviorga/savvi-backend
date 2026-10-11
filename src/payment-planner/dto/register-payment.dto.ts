@@ -5,6 +5,7 @@ import {
   IsOptional,
   IsDateString,
   IsPositive,
+  IsUUID,
   Min,
 } from 'class-validator';
 
@@ -29,18 +30,21 @@ export class RegisterPaymentDto {
   paidAt?: string;
 
   @ApiProperty({
-    description: 'Cuenta desde la que se paga (se usa para la transacción asociada)',
+    description:
+      'Cuenta desde la que se paga (se usa para la transacción asociada)',
     example: 'Cuenta Corriente Banco',
   })
   @IsString()
   account: string;
 
   @ApiProperty({
-    description: 'Categoría del gasto (se usa para la transacción asociada)',
-    example: 'Deudas',
+    description:
+      'Id de la categoría del gasto (se usa para la transacción asociada)',
+    example: '87a1883c-8464-4d0f-b450-771ca2886c38',
+    format: 'uuid',
   })
-  @IsString()
-  category: string;
+  @IsUUID('all', { message: 'La categoría no es válida' })
+  categoryId: string;
 
   @ApiPropertyOptional({
     description: 'Descripción opcional del pago',

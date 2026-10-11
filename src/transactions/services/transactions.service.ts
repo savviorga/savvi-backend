@@ -10,6 +10,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Transaction } from '../entities/transaction.entity';
 import { Document } from '../entities/document.entity';
+import { Category } from '../../categories/entities/category.entity';
 import { S3Service } from '../../s3/s3.service';
 import { bucket } from '../../infrastructure/config/s3.config';
 
@@ -24,6 +25,8 @@ export class TransactionsService {
     private readonly transactionRepository: Repository<Transaction>,
     @InjectRepository(Document)
     private readonly documentRepository: Repository<Document>,
+    @InjectRepository(Category)
+    private readonly categoryRepository: Repository<Category>,
     private readonly s3Service: S3Service,
   ) {}
 
@@ -31,11 +34,56 @@ export class TransactionsService {
     userId: string,
     createTransactionDto: CreateTransactionDto,
   ): Promise<Transaction> {
+    const [category] = await this.findUserCategories(userId, [
+      createTransactionDto.categoryId,
+    ]);
     const transaction = this.transactionRepository.create({
       ...createTransactionDto,
       userId,
+      legacyCategoryName: category.name,
     });
-    return await this.transactionRepository.save(transaction);
+    const saved = await this.transactionRepository.save(transaction);
+    return this.findOne(userId, saved.id);
+  }
+
+  /**
+   * Categoría del usuario con ese nombre y tipo; si no existe, la crea. Para
+   * los registros automáticos (pagos recurrentes, IA) que no eligen una.
+   */
+  async findOrCreateCategory(
+    userId: string,
+    name: string,
+    type: 'ingreso' | 'egreso',
+  ): Promise<Category> {
+    const existing = await this.categoryRepository
+      .createQueryBuilder('c')
+      .where('c.userId = :userId', { userId })
+      .andWhere('LOWER(TRIM(c.name)) = LOWER(TRIM(:name))', { name })
+      .andWhere('c.type = :type', { type })
+      .orderBy('c.isActive', 'DESC')
+      .addOrderBy('c.createdAt', 'ASC')
+      .getOne();
+    if (existing) return existing;
+
+    return this.categoryRepository.save(
+      this.categoryRepository.create({ userId, name, type }),
+    );
+  }
+
+  /** Valida que las categorías existan y sean del usuario; las devuelve en el mismo orden. */
+  private async findUserCategories(
+    userId: string,
+    categoryIds: string[],
+  ): Promise<Category[]> {
+    const uniqueIds = [...new Set(categoryIds)];
+    const found = await this.categoryRepository.find({
+      where: { id: In(uniqueIds), userId },
+    });
+    const byId = new Map(found.map((category) => [category.id, category]));
+    if (byId.size !== uniqueIds.length) {
+      throw new BadRequestException('La categoría no existe');
+    }
+    return categoryIds.map((id) => byId.get(id)!);
   }
 
   async createBulk(
@@ -50,9 +98,17 @@ export class TransactionsService {
         `Máximo ${MAX_BULK_ITEMS} transacciones por petición`,
       );
     }
+    const categories = await this.findUserCategories(
+      userId,
+      createTransactionsDto.map((row) => row.categoryId),
+    );
     // `save` con un arreglo usa una sola transacción: se guardan todas o ninguna.
     const transactions = this.transactionRepository.create(
-      createTransactionsDto.map((row) => ({ ...row, userId })),
+      createTransactionsDto.map((row, i) => ({
+        ...row,
+        userId,
+        legacyCategoryName: categories[i].name,
+      })),
     );
     const saved = await this.transactionRepository.save(transactions);
 
@@ -70,6 +126,7 @@ export class TransactionsService {
     const [transactions, counts] = await Promise.all([
       this.transactionRepository.find({
         where: { userId },
+        relations: { category: { parent: true } },
         order: { date: 'DESC', id: 'DESC' },
       }),
       this.documentRepository
@@ -100,6 +157,7 @@ export class TransactionsService {
   async findOne(userId: string, id: string): Promise<Transaction> {
     const transaction = await this.transactionRepository.findOne({
       where: { id, userId },
+      relations: { category: { parent: true } },
     });
     if (!transaction) {
       throw new NotFoundException('Transacción no encontrada');
@@ -121,7 +179,17 @@ export class TransactionsService {
     const { documentsToDelete, filesToAdd, ...fields } = updateTransactionDto;
 
     if (Object.keys(fields).length > 0) {
-      await this.transactionRepository.update({ id, userId }, fields);
+      const legacy = fields.categoryId
+        ? {
+            legacyCategoryName: (
+              await this.findUserCategories(userId, [fields.categoryId])
+            )[0].name,
+          }
+        : {};
+      await this.transactionRepository.update(
+        { id, userId },
+        { ...fields, ...legacy },
+      );
     }
 
     if (documentsToDelete?.length) {

@@ -9,6 +9,7 @@ import {
   MaxLength,
   IsHexColor,
   IsIn,
+  IsNotEmpty,
 } from 'class-validator';
 
 export const CATEGORY_TYPE_VALUES = ['ingreso', 'egreso'] as const;
@@ -21,7 +22,8 @@ export class CreateCategoryDto {
     maxLength: 100,
   })
   @IsString()
-  @MaxLength(100)
+  @IsNotEmpty({ message: 'El nombre es requerido' })
+  @MaxLength(100, { message: 'El nombre no puede exceder los 100 caracteres' })
   name: string;
 
   @ApiProperty({
@@ -59,13 +61,15 @@ export class CreateCategoryDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'ID de la categoría padre para jerarquías',
+    description:
+      'Categoría principal (grupo) a la que pertenece. `null` la deja como principal. Solo se permiten dos niveles y el mismo tipo que el grupo.',
     example: 'b8f2a5a2-6c56-45d7-b5d5-1a0f3c4e5a12',
     format: 'uuid',
+    nullable: true,
   })
   @IsOptional()
-  @IsUUID()
-  parentId?: string;
+  @IsUUID('all', { message: 'El grupo no es válido' })
+  parentId?: string | null;
 
   @ApiPropertyOptional({
     description: 'Límite de presupuesto asociado a la categoría',

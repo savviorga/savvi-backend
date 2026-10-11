@@ -33,6 +33,10 @@ export class TransferTemplate {
   @Column({ name: 'name', type: 'varchar', length: 200 })
   name: string;
 
+  /** Texto libre: referencia de pago, número de crédito, link del portal, etc. */
+  @Column({ name: 'description', type: 'text', nullable: true })
+  description?: string | null;
+
   @Column({ name: 'payee_name', type: 'varchar', length: 200 })
   payeeName: string;
 

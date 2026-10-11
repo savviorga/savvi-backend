@@ -6,6 +6,7 @@ import {
   IsDateString,
   IsNotEmpty,
   IsPositive,
+  IsUUID,
   MaxLength,
   Min,
 } from 'class-validator';
@@ -44,16 +45,13 @@ export class CreateTransactionDto {
   amount: number;
 
   @ApiProperty({
-    description: 'Categoría asociada a la transacción',
-    example: 'Alimentación',
-    maxLength: 100,
+    description: 'Id de la categoría (del mismo usuario)',
+    example: '87a1883c-8464-4d0f-b450-771ca2886c38',
+    format: 'uuid',
   })
-  @IsString({ message: 'La categoría debe ser texto' })
   @IsNotEmpty({ message: 'La categoría es requerida' })
-  @MaxLength(100, {
-    message: 'La categoría no puede exceder los 100 caracteres',
-  })
-  category: string;
+  @IsUUID('all', { message: 'La categoría no es válida' })
+  categoryId: string;
 
   @ApiProperty({
     description: 'Cuenta asociada a la transacción',

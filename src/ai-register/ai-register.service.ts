@@ -10,8 +10,11 @@ import { AiRegisterJob } from './entities/ai-register-job.entity';
 
 type ExtractedTransactionData = Pick<
   CreateTransactionDto,
-  'date' | 'type' | 'amount' | 'category' | 'account' | 'description'
->;
+  'date' | 'type' | 'amount' | 'account' | 'description'
+> & {
+  /** Nombre deducido; se traduce a una categoría del usuario al registrar. */
+  categoryName: string;
+};
 
 const SUPPORTED_MIME_TYPES = new Set([
   'image/jpeg',
@@ -74,10 +77,16 @@ export class AiRegisterService {
     try {
       await this.aiRegisterJobRepository.update(job.id, { status: 'processing', error: null });
       const extractedData = this.extractTransactionData(job);
-      const transaction = await this.transactionsService.create(
+      const { categoryName, ...fields } = extractedData;
+      const category = await this.transactionsService.findOrCreateCategory(
         job.userId,
-        extractedData,
+        categoryName,
+        fields.type === 'ingreso' ? 'ingreso' : 'egreso',
       );
+      const transaction = await this.transactionsService.create(job.userId, {
+        ...fields,
+        categoryId: category.id,
+      });
       await this.aiRegisterJobRepository.update(job.id, {
         status: 'completed',
         extractedPayload: extractedData,
@@ -138,7 +147,7 @@ export class AiRegisterService {
       date: new Date().toISOString().slice(0, 10),
       type: this.extractType(textInput),
       amount,
-      category: this.extractCategory(textInput),
+      categoryName: this.extractCategory(textInput),
       account: this.extractAccount(textInput),
       description: this.extractDescription(job),
     };
