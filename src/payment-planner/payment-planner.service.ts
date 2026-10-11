@@ -158,7 +158,7 @@ export class PaymentPlannerService {
       date: paidAtStr,
       type: 'egreso',
       amount,
-      category: dto.category,
+      categoryId: dto.categoryId,
       account: dto.account,
       description,
     });

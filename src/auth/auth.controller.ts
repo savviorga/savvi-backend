@@ -1,6 +1,16 @@
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiBadRequestResponse,
+  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiExtraModels,
@@ -17,6 +27,7 @@ import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { PasswordResetService } from './password-reset.service';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { VerifyResetCodeDto } from './dto/verify-reset-code.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -83,6 +94,24 @@ export class AuthController {
   })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({
+    summary: 'Renovar la sesión',
+    description:
+      'Con un JWT aún vigente devuelve uno nuevo (otros 7 días) y el usuario actualizado. El frontend lo llama mientras el usuario esté activo para que la sesión no venza en medio del uso.',
+  })
+  @ApiOkResponse({ description: 'Sesión renovada', type: AuthResponseDto })
+  @ApiUnauthorizedResponse({
+    description: 'Token JWT ausente, inválido o vencido',
+  })
+  refresh(@Req() req: Request) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.authService.refreshSession(userId);
   }
 
   @Post('forgot-password')

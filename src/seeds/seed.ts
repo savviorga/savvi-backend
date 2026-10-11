@@ -271,17 +271,23 @@ async function seedUser(profileIndex: number, today: Date): Promise<void> {
 
   // --- Transacciones -------------------------------------------------------
   const transactions = await transactionRepo.save(
-    transactionPlans.map((plan) =>
-      transactionRepo.create({
+    transactionPlans.map((plan) => {
+      const category = categoryByName.get(plan.category);
+      if (!category) {
+        throw new Error(`Categoría de semilla inexistente: ${plan.category}`);
+      }
+      return transactionRepo.create({
         userId: user.id,
         date: plan.date,
         type: plan.type,
         amount: plan.amount,
-        category: plan.category,
+        categoryId: category.id,
+        category,
+        legacyCategoryName: category.name,
         account: plan.account,
         description: plan.description,
-      }),
-    ),
+      });
+    }),
     { chunk: BATCH_SIZE },
   );
   count('Transacciones', transactions.length);
@@ -409,7 +415,7 @@ async function seedUser(profileIndex: number, today: Date): Promise<void> {
     ATTACHABLE_CATEGORIES.includes(transactionPlans[index].category),
   );
   const documents = pickMany(attachable, DOCUMENTS_PER_USER).map((tx) => {
-    const slug = tx.category
+    const slug = tx.category.name
       .toLowerCase()
       .normalize('NFD')
       .replace(/[̀-ͯ]/g, '')

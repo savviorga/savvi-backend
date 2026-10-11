@@ -37,10 +37,14 @@ export class Category {
   @Column({ type: 'text', nullable: true })
   description?: string;
 
-  // Parent / Children relation (hierarchical categories)
+  /** Grupo al que pertenece (`null` = categoría principal). Máximo dos niveles. */
+  @Column({ name: 'parentId', type: 'uuid', nullable: true })
+  parentId: string | null;
+
   @ManyToOne(() => Category, (category) => category.children, {
     nullable: true,
   })
+  @JoinColumn({ name: 'parentId' })
   parent?: Category;
 
   @OneToMany(() => Category, (category) => category.parent)

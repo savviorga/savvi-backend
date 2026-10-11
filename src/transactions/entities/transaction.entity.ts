@@ -6,6 +6,7 @@ import {
   JoinColumn,
 } from 'typeorm';
 import { User } from '../../auth/entities/user.entity';
+import { Category } from '../../categories/entities/category.entity';
 
 export type TransactionFile = {
   filename: string;
@@ -35,8 +36,25 @@ export class Transaction {
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
 
-  @Column({ type: 'varchar', length: 100 })
-  category: string;
+  @Column({ name: 'category_id', type: 'uuid' })
+  categoryId: string;
+
+  @ManyToOne(() => Category, { onDelete: 'RESTRICT' })
+  @JoinColumn({ name: 'category_id' })
+  category: Category;
+
+  /**
+   * @deprecated Columna vieja `category` (texto). Solo se conserva hasta
+   * eliminarla: nadie la lee y se llena con el nombre de la categoría.
+   */
+  @Column({
+    name: 'category',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+    select: false,
+  })
+  legacyCategoryName: string | null;
 
   @Column({ type: 'varchar', length: 100 })
   account: string;

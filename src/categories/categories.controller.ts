@@ -7,6 +7,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
   Req,
   UseGuards,
 } from '@nestjs/common';
@@ -20,7 +21,9 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
   ApiTags,
+  ApiConflictResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CategoriesService } from './categories.service';
@@ -67,10 +70,7 @@ export class CategoriesController {
   })
   @ApiOkResponse({ description: 'Categoría encontrada' })
   @ApiNotFoundResponse({ description: 'La categoría no existe' })
-  findOne(
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  findOne(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     const userId = (req.user as { userId: string }).userId;
     return this.categoriesService.findOne(userId, id);
   }
@@ -124,13 +124,28 @@ export class CategoriesController {
     description: 'ID (UUID) de la categoría',
     format: 'uuid',
   })
+  @ApiQuery({
+    name: 'releaseChildren',
+    required: false,
+    type: Boolean,
+    description:
+      'Si es un grupo con subcategorías, las deja como categorías principales y elimina el grupo.',
+  })
   @ApiNoContentResponse({ description: 'Categoría eliminada' })
   @ApiNotFoundResponse({ description: 'La categoría no existe' })
+  @ApiConflictResponse({
+    description: 'Tiene transacciones, o es un grupo con subcategorías',
+  })
   remove(
     @Req() req: Request,
     @Param('id', ParseUUIDPipe) id: string,
+    @Query('releaseChildren') releaseChildren?: string,
   ) {
     const userId = (req.user as { userId: string }).userId;
-    return this.categoriesService.remove(userId, id);
+    return this.categoriesService.remove(
+      userId,
+      id,
+      releaseChildren === 'true',
+    );
   }
 }

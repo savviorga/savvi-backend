@@ -328,17 +328,28 @@ export class ProfileService {
   private async topExpenseCategories(userId: string) {
     const rows = await this.transactionRepository
       .createQueryBuilder('t')
-      .select('t.category', 'category')
+      .innerJoin('t.category', 'c')
+      // Las subcategorías suman a su grupo (categoría principal).
+      .leftJoin('c.parent', 'p')
+      .select('COALESCE(p.id, c.id)', 'categoryId')
+      .addSelect('COALESCE(p.name, c.name)', 'category')
       .addSelect('SUM(t.amount)', 'total')
       .addSelect('COUNT(*)', 'count')
       .where('t.userId = :userId', { userId })
       .andWhere(`LOWER(t.type) = 'egreso'`)
-      .groupBy('t.category')
+      .groupBy('COALESCE(p.id, c.id)')
+      .addGroupBy('COALESCE(p.name, c.name)')
       .orderBy('total', 'DESC')
       .limit(TOP_CATEGORIES_LIMIT)
-      .getRawMany<{ category: string; total: string; count: string }>();
+      .getRawMany<{
+        categoryId: string;
+        category: string;
+        total: string;
+        count: string;
+      }>();
 
     return rows.map((r) => ({
+      categoryId: r.categoryId,
       category: r.category,
       total: round2(toNumber(r.total)),
       count: toNumber(r.count),

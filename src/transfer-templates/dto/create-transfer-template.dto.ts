@@ -41,6 +41,17 @@ export class CreateTransferTemplateDto {
   @MaxLength(200)
   name: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Descripción libre de la plantilla (referencia de pago, número de crédito, link del portal…)',
+    example: 'Crédito hipotecario 30563 · pagar en https://credifamilia.com',
+    maxLength: 1000,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
   @ApiProperty({
     description: 'Nombre del beneficiario de la transferencia',
     example: 'Inmobiliaria ABC',
