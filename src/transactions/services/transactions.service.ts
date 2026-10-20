@@ -11,6 +11,7 @@ import { In, Repository } from 'typeorm';
 import { Transaction } from '../entities/transaction.entity';
 import { Document } from '../entities/document.entity';
 import { Category } from '../../categories/entities/category.entity';
+import { Account } from '../../accounts/entities/account.entity';
 import { S3Service } from '../../s3/s3.service';
 import { bucket } from '../../infrastructure/config/s3.config';
 import { isUserKey, sanitizeFileName } from '../../s3/s3-keys';
@@ -30,6 +31,8 @@ export class TransactionsService {
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
     private readonly s3Service: S3Service,
+    @InjectRepository(Account)
+    private readonly accountRepository: Repository<Account>,
   ) {}
 
   async create(
@@ -39,6 +42,8 @@ export class TransactionsService {
     const [category] = await this.findUserCategories(userId, [
       createTransactionDto.categoryId,
     ]);
+    assertCategoryMatchesType(category, createTransactionDto.type);
+    await this.assertUserAccounts(userId, [createTransactionDto.account]);
     const transaction = this.transactionRepository.create({
       ...createTransactionDto,
       userId,
@@ -88,6 +93,20 @@ export class TransactionsService {
     return categoryIds.map((id) => byId.get(id)!);
   }
 
+  /** Valida que las cuentas existan y sean del usuario. */
+  private async assertUserAccounts(
+    userId: string,
+    accountIds: string[],
+  ): Promise<void> {
+    const uniqueIds = [...new Set(accountIds)];
+    const found = await this.accountRepository.count({
+      where: { id: In(uniqueIds), userId },
+    });
+    if (found !== uniqueIds.length) {
+      throw new BadRequestException('La cuenta no existe');
+    }
+  }
+
   async createBulk(
     userId: string,
     createTransactionsDto: CreateTransactionDto[],
@@ -103,6 +122,13 @@ export class TransactionsService {
     const categories = await this.findUserCategories(
       userId,
       createTransactionsDto.map((row) => row.categoryId),
+    );
+    createTransactionsDto.forEach((row, i) =>
+      assertCategoryMatchesType(categories[i], row.type, i + 1),
+    );
+    await this.assertUserAccounts(
+      userId,
+      createTransactionsDto.map((row) => row.account),
     );
     // `save` con un arreglo usa una sola transacción: se guardan todas o ninguna.
     const transactions = this.transactionRepository.create(
@@ -176,21 +202,35 @@ export class TransactionsService {
     id: string,
     updateTransactionDto: UpdateTransactionDto,
   ) {
-    await this.findOne(userId, id);
+    const current = await this.findOne(userId, id);
 
     const { documentsToDelete, filesToAdd, ...fields } = updateTransactionDto;
 
     if (Object.keys(fields).length > 0) {
-      const legacy = fields.categoryId
-        ? {
-            legacyCategoryName: (
-              await this.findUserCategories(userId, [fields.categoryId])
-            )[0].name,
-          }
-        : {};
+      const category =
+        fields.categoryId !== undefined || fields.type !== undefined
+          ? (
+              await this.findUserCategories(userId, [
+                fields.categoryId ?? current.categoryId,
+              ])
+            )[0]
+          : null;
+      if (category) {
+        assertCategoryMatchesType(category, fields.type ?? current.type);
+      }
+      if (fields.account !== undefined) {
+        await this.assertUserAccounts(userId, [fields.account]);
+      }
+      const legacy =
+        category && fields.categoryId
+          ? { legacyCategoryName: category.name }
+          : {};
+      // Al elegir una cuenta real, el texto viejo deja de aplicar.
+      const legacyAccount =
+        fields.account !== undefined ? { legacyAccount: null } : {};
       await this.transactionRepository.update(
         { id, userId },
-        { ...fields, ...legacy },
+        { ...fields, ...legacy, ...legacyAccount },
       );
     }
 
@@ -450,4 +490,20 @@ export class TransactionsService {
       })),
     );
   }
+}
+
+/**
+ * La categoría debe ser del mismo tipo que la transacción (las
+ * transferencias aceptan cualquiera).
+ */
+function assertCategoryMatchesType(
+  category: Category,
+  type: string,
+  row?: number,
+): void {
+  if (type === 'transferencia' || category.type === type) return;
+  const prefix = row ? `Fila ${row}: ` : '';
+  throw new BadRequestException(
+    `${prefix}la categoría "${category.name}" es de ${category.type === 'ingreso' ? 'ingresos' : 'gastos'} y la transacción es un ${type}.`,
+  );
 }

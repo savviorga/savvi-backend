@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { CreateAccountDto } from './dto/create-account.dto';
 import { UpdateAccountDto } from './dto/update-account.dto';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -56,8 +60,34 @@ export class AccountsService {
     return this.accountRepository.save(account);
   }
 
+  /**
+   * Elimina la cuenta si nada depende de ella. Con transacciones, deudas o
+   * pagos recurrentes se responde 409: se puede desactivar en su lugar.
+   */
   async remove(userId: string, id: string): Promise<void> {
     await this.findOne(userId, id);
+
+    const [usage] = (await this.accountRepository.query(
+      `SELECT
+         (SELECT count(*) FROM finance.transactions WHERE account_id = $1) AS transactions,
+         (SELECT count(*) FROM finance.debts WHERE "accountId" = $1) AS debts,
+         (SELECT count(*) FROM finance.transfer_templates WHERE from_account_id = $1) AS templates`,
+      [id],
+    )) as { transactions: string; debts: string; templates: string }[];
+    const parts = [
+      [Number(usage.transactions), 'transacción', 'transacciones'],
+      [Number(usage.debts), 'deuda', 'deudas'],
+      [Number(usage.templates), 'pago recurrente', 'pagos recurrentes'],
+    ] as const;
+    const used = parts
+      .filter(([n]) => n > 0)
+      .map(([n, one, many]) => `${n} ${n === 1 ? one : many}`);
+    if (used.length) {
+      throw new ConflictException(
+        `No puedes eliminar esta cuenta: tiene ${used.join(', ')}. Desactívala o mueve esos registros a otra cuenta.`,
+      );
+    }
+
     await this.accountRepository.delete({ id, userId });
   }
 

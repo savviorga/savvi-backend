@@ -7,9 +7,14 @@ import {
   IsNotEmpty,
   IsPositive,
   IsUUID,
+  IsIn,
   MaxLength,
   Min,
 } from 'class-validator';
+import {
+  TRANSACTION_TYPES,
+  type TransactionType,
+} from '../entities/transaction.entity';
 
 export class CreateTransactionDto {
   @ApiProperty({
@@ -26,10 +31,14 @@ export class CreateTransactionDto {
 
   @ApiProperty({
     description: 'Tipo de la transacción',
+    enum: TRANSACTION_TYPES,
     example: 'egreso',
   })
   @IsNotEmpty({ message: 'El tipo de transacción es requerido' })
-  type: string;
+  @IsIn(TRANSACTION_TYPES, {
+    message: "El tipo debe ser 'ingreso', 'egreso' o 'transferencia'",
+  })
+  type: TransactionType;
 
   @ApiProperty({
     description: 'Monto de la transacción',
@@ -54,13 +63,12 @@ export class CreateTransactionDto {
   categoryId: string;
 
   @ApiProperty({
-    description: 'Cuenta asociada a la transacción',
-    example: 'Cuenta Corriente Banco',
-    maxLength: 100,
+    description: 'Id (UUID) de una cuenta del usuario',
+    example: '5b1c9a3e-2f4d-4c6a-9e8b-7a1d2c3b4e5f',
+    format: 'uuid',
   })
-  @IsString({ message: 'La cuenta debe ser texto' })
   @IsNotEmpty({ message: 'La cuenta es requerida' })
-  @MaxLength(100, { message: 'La cuenta no puede exceder los 100 caracteres' })
+  @IsUUID('all', { message: 'La cuenta no es válida' })
   account: string;
 
   @ApiPropertyOptional({

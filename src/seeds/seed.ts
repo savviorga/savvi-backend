@@ -284,7 +284,8 @@ async function seedUser(profileIndex: number, today: Date): Promise<void> {
         categoryId: category.id,
         category,
         legacyCategoryName: category.name,
-        account: plan.account,
+        account: accountByName.get(plan.account)?.id ?? null,
+        legacyAccount: accountByName.has(plan.account) ? null : plan.account,
         description: plan.description,
       });
     }),

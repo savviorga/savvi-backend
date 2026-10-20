@@ -8,6 +8,13 @@ import {
 import { User } from '../../auth/entities/user.entity';
 import { Category } from '../../categories/entities/category.entity';
 
+export const TRANSACTION_TYPES = [
+  'ingreso',
+  'egreso',
+  'transferencia',
+] as const;
+export type TransactionType = (typeof TRANSACTION_TYPES)[number];
+
 export type TransactionFile = {
   filename: string;
   url: string;
@@ -31,7 +38,7 @@ export class Transaction {
   date: Date;
 
   @Column({ type: 'varchar', length: 50 })
-  type: string;
+  type: TransactionType;
 
   @Column({ type: 'decimal', precision: 12, scale: 2 })
   amount: number;
@@ -56,8 +63,21 @@ export class Transaction {
   })
   legacyCategoryName: string | null;
 
-  @Column({ type: 'varchar', length: 100 })
-  account: string;
+  /** Id de la cuenta del usuario (`account_id`, FK a `accounts`). */
+  @Column({ name: 'account_id', type: 'uuid', nullable: true })
+  account: string | null;
+
+  /**
+   * Texto que tenía la cuenta antes de ser un id (solo filas viejas que no se
+   * pudieron enlazar a una cuenta). Para mostrarlo; no se escribe.
+   */
+  @Column({
+    name: 'legacy_account',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  legacyAccount: string | null;
 
   @Column({ type: 'text', nullable: true })
   description: string;

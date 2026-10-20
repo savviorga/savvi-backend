@@ -46,6 +46,7 @@ describe('TransactionsService – documentos', () => {
       documentRepository as never,
       {} as never,
       s3Service as never,
+      {} as never,
     );
   });
 
