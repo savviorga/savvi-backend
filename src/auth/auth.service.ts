@@ -19,6 +19,18 @@ import { minutesFromNow } from './utils/otp.util';
 /** Contraseñas incorrectas seguidas antes de bloquear el login. */
 const MAX_FAILED_LOGINS = 10;
 const LOCK_MINUTES = 15;
+/** Tope absoluto de una sesión: pasado este tiempo desde el login, /auth/refresh ya no la renueva. */
+const SESSION_MAX_DAYS = 30;
+
+/** Claims propios del JWT de Savvi. */
+export interface SessionClaims {
+  sub: string;
+  email: string;
+  /** `users.tokenVersion` al emitirlo: si no coincide, el token ya no sirve. */
+  ver: number;
+  /** Segundos (epoch) del login original; se conserva al renovar. */
+  auth_time: number;
+}
 
 @Injectable()
 export class AuthService {
@@ -43,12 +55,7 @@ export class AuthService {
       password: hashedPassword,
     });
     const saved = await this.userRepository.save(user);
-    const result = toPublicUser(saved);
-    const access_token = this.jwtService.sign({
-      sub: saved.id,
-      email: saved.email,
-    });
-    return { user: result, access_token };
+    return this.createSession(saved);
   }
 
   /**
@@ -60,7 +67,10 @@ export class AuthService {
     if (user.twoFactorEnabled) {
       return this.twoFactorService.startLoginChallenge(user);
     }
-    return { requiresTwoFactor: false as const, ...this.createSession(user) };
+    return {
+      requiresTwoFactor: false as const,
+      ...(await this.createSession(user)),
+    };
   }
 
   async verifyTwoFactorLogin(dto: VerifyTwoFactorDto) {
@@ -81,20 +91,56 @@ export class AuthService {
     return { id: user.id, name: user.name, email: user.email };
   }
 
-  /** Emite un JWT nuevo para un usuario con sesión vigente (sesión deslizante). */
-  async refreshSession(userId: string) {
+  /**
+   * Emite un JWT nuevo para un usuario con sesión vigente (sesión deslizante),
+   * conservando la hora del login: pasados SESSION_MAX_DAYS hay que volver a entrar.
+   */
+  async refreshSession(userId: string, authTime?: number) {
+    if (
+      authTime &&
+      Date.now() / 1000 - authTime > SESSION_MAX_DAYS * 24 * 60 * 60
+    ) {
+      throw new UnauthorizedException(
+        'Tu sesión expiró. Vuelve a iniciar sesión.',
+      );
+    }
     const user = await this.userRepository.findOne({ where: { id: userId } });
     if (!user) {
       throw new UnauthorizedException('Usuario no encontrado');
     }
-    return this.createSession(user);
+    return this.createSession(user, authTime);
   }
 
-  private createSession(user: User) {
-    const access_token = this.jwtService.sign({
+  /**
+   * Tras un cambio de seguridad (contraseña, 2FA, email) invalida todas las
+   * sesiones del usuario y devuelve una nueva para quien hizo el cambio.
+   */
+  async rotateSession(userId: string, authTime?: number) {
+    await this.userRepository.increment({ id: userId }, 'tokenVersion', 1);
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    return this.createSession(user, authTime);
+  }
+
+  private async createSession(user: User, authTime?: number) {
+    const version =
+      user.tokenVersion ??
+      (
+        await this.userRepository.findOne({
+          where: { id: user.id },
+          select: { id: true, tokenVersion: true },
+        })
+      )?.tokenVersion ??
+      0;
+    const claims: SessionClaims = {
       sub: user.id,
       email: user.email,
-    });
+      ver: version,
+      auth_time: authTime ?? Math.floor(Date.now() / 1000),
+    };
+    const access_token = this.jwtService.sign(claims);
     return { user: toPublicUser(user), access_token };
   }
 
@@ -105,7 +151,7 @@ export class AuthService {
   async validateUser(email: string, password: string): Promise<User> {
     const user = await this.userRepository
       .createQueryBuilder('u')
-      .addSelect(['u.failedLoginAttempts', 'u.lockedUntil'])
+      .addSelect(['u.failedLoginAttempts', 'u.lockedUntil', 'u.tokenVersion'])
       .where('u.email = :email', { email })
       .getOne();
 
@@ -150,6 +196,7 @@ export function toPublicUser(user: User) {
     password: _password,
     failedLoginAttempts: _failed,
     lockedUntil: _locked,
+    tokenVersion: _version,
     ...result
   } = user;
   return result;

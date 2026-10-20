@@ -140,8 +140,16 @@ export class TwoFactorController {
   @ApiUnauthorizedResponse({
     description: 'Token JWT ausente/inválido o contraseña incorrecta',
   })
-  disable(@Req() req: Request, @Body() dto: DisableTwoFactorDto) {
-    const userId = (req.user as { userId: string }).userId;
-    return this.twoFactorService.disable(userId, dto);
+  async disable(@Req() req: Request, @Body() dto: DisableTwoFactorDto) {
+    const { userId, authTime } = req.user as {
+      userId: string;
+      authTime?: number;
+    };
+    const result = await this.twoFactorService.disable(userId, dto);
+    // Cambio de seguridad: se cierran las demás sesiones.
+    return {
+      ...result,
+      ...(await this.authService.rotateSession(userId, authTime)),
+    };
   }
 }

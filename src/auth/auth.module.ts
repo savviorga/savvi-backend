@@ -26,6 +26,6 @@ import { getJwtSecret } from '../config/env';
   ],
   controllers: [AuthController, TwoFactorController],
   providers: [AuthService, PasswordResetService, TwoFactorService, JwtStrategy],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, TwoFactorService, JwtModule],
 })
 export class AuthModule {}

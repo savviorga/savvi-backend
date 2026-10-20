@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -147,6 +148,68 @@ export class TwoFactorService {
     };
   }
 
+  // ---------- Cambio de email ----------
+
+  /**
+   * Valida la contraseña y envía un código al email nuevo. El email no cambia
+   * hasta confirmar el código (`confirmEmailChange`).
+   */
+  async startEmailChange(
+    userId: string,
+    newEmail: string,
+    currentPassword: string,
+  ) {
+    const user = await this.findUser(userId);
+    if (!(await bcrypt.compare(currentPassword, user.password))) {
+      throw new UnauthorizedException('La contraseña actual es incorrecta');
+    }
+    if (newEmail === user.email.toLowerCase()) {
+      throw new BadRequestException('Ese ya es tu email.');
+    }
+    await this.assertEmailAvailable(newEmail, userId);
+
+    await this.assertCooldown(user.id, 'email_change');
+    await this.invalidateOpen(user.id, 'email_change');
+    await this.createAndSend(user, 'email_change', null, {
+      payload: newEmail,
+      sendTo: newEmail,
+    });
+
+    return {
+      message: `Te enviamos un código a ${newEmail}.`,
+      expiresIn: CODE_TTL_MINUTES * 60,
+    };
+  }
+
+  /** Valida el código y cambia el email. Devuelve el email nuevo. */
+  async confirmEmailChange(userId: string, code: string): Promise<string> {
+    const challenge = await this.challengeRepository.findOne({
+      where: { userId, purpose: 'email_change', usedAt: IsNull() },
+      order: { createdAt: 'DESC' },
+    });
+    if (!challenge?.payload) {
+      throw new BadRequestException(INVALID_CODE_MESSAGE);
+    }
+
+    await this.consumeCode(challenge, code);
+    await this.assertEmailAvailable(challenge.payload, userId);
+    await this.userRepository.update(userId, { email: challenge.payload });
+
+    this.logger.log(`Email actualizado para el usuario ${userId}`);
+    return challenge.payload;
+  }
+
+  private async assertEmailAvailable(email: string, userId: string) {
+    const existing = await this.userRepository
+      .createQueryBuilder('u')
+      .where('LOWER(u.email) = LOWER(:email)', { email })
+      .andWhere('u.id <> :userId', { userId })
+      .getExists();
+    if (existing) {
+      throw new ConflictException('Ya existe un usuario con este email');
+    }
+  }
+
   // ---------- Internos ----------
 
   private async findUser(userId: string): Promise<User> {
@@ -206,6 +269,7 @@ export class TwoFactorService {
     user: User,
     purpose: TwoFactorPurpose,
     tokenHash: string | null,
+    options: { payload?: string; sendTo?: string } = {},
   ) {
     const code = generateOtpCode();
     const challenge = await this.challengeRepository.save(
@@ -214,13 +278,14 @@ export class TwoFactorService {
         purpose,
         codeHash: sha256(code),
         tokenHash,
+        payload: options.payload ?? null,
         expiresAt: minutesFromNow(CODE_TTL_MINUTES),
         lastSentAt: new Date(),
       }),
     );
 
     try {
-      await this.sendCode(user, code, purpose);
+      await this.sendCode(user, code, purpose, options.sendTo);
     } catch (error) {
       // Sin email enviado el reto no sirve; lo borramos para no bloquear el reintento
       await this.challengeRepository.delete(challenge.id);
@@ -259,11 +324,23 @@ export class TwoFactorService {
       );
     }
 
-    await this.sendCode(user, code, challenge.purpose);
+    await this.sendCode(
+      user,
+      code,
+      challenge.purpose,
+      challenge.purpose === 'email_change'
+        ? (challenge.payload ?? undefined)
+        : undefined,
+    );
   }
 
-  private async sendCode(user: User, code: string, purpose: TwoFactorPurpose) {
-    await this.emailService.sendTwoFactorCode(user.email, {
+  private async sendCode(
+    user: User,
+    code: string,
+    purpose: TwoFactorPurpose,
+    sendTo?: string,
+  ) {
+    await this.emailService.sendTwoFactorCode(sendTo ?? user.email, {
       name: user.name,
       code,
       expiresInMinutes: CODE_TTL_MINUTES,

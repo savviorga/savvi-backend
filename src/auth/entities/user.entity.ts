@@ -27,6 +27,10 @@ export class User {
   @Column({ type: 'int', default: 0, select: false })
   failedLoginAttempts: number;
 
+  /** Va en el JWT: subirla invalida todas las sesiones abiertas del usuario. */
+  @Column({ type: 'int', default: 0, select: false })
+  tokenVersion: number;
+
   /** Hasta cuándo el login está bloqueado por demasiados intentos fallidos. */
   @Column({ type: 'timestamptz', nullable: true, select: false })
   lockedUntil: Date | null;

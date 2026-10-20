@@ -9,8 +9,9 @@ import {
 /**
  * - `login`: segundo paso del inicio de sesión.
  * - `enable`: confirma el email antes de activar el 2FA.
+ * - `email_change`: confirma el email nuevo (va en `payload`).
  */
-export type TwoFactorPurpose = 'login' | 'enable';
+export type TwoFactorPurpose = 'login' | 'enable' | 'email_change';
 
 /**
  * Código enviado por email para el doble factor. Solo guarda hashes SHA-256
@@ -49,6 +50,10 @@ export class TwoFactorChallenge {
 
   @Column({ name: 'last_sent_at', type: 'timestamptz' })
   lastSentAt: Date;
+
+  /** Dato asociado al reto; en `email_change`, el email nuevo. */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  payload: string | null;
 
   @Column({ name: 'used_at', type: 'timestamptz', nullable: true })
   usedAt: Date | null;

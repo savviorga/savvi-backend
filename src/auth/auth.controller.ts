@@ -125,15 +125,18 @@ export class AuthController {
   @ApiOperation({
     summary: 'Renovar la sesión',
     description:
-      'Con un JWT aún vigente devuelve uno nuevo (otros 7 días) y el usuario actualizado. El frontend lo llama mientras el usuario esté activo para que la sesión no venza en medio del uso.',
+      'Con un JWT aún vigente devuelve uno nuevo (otros 7 días) y el usuario actualizado. El frontend lo llama mientras el usuario esté activo para que la sesión no venza en medio del uso. Pasados 30 días desde el login responde 401.',
   })
   @ApiOkResponse({ description: 'Sesión renovada', type: AuthResponseDto })
   @ApiUnauthorizedResponse({
     description: 'Token JWT ausente, inválido o vencido',
   })
   refresh(@Req() req: Request) {
-    const userId = (req.user as { userId: string }).userId;
-    return this.authService.refreshSession(userId);
+    const { userId, authTime } = req.user as {
+      userId: string;
+      authTime?: number;
+    };
+    return this.authService.refreshSession(userId, authTime);
   }
 
   @Post('forgot-password')

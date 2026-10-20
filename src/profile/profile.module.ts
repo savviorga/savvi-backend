@@ -12,9 +12,11 @@ import { TransferTemplate } from '../transfer-templates/entities/transfer-templa
 import { AiRegisterJob } from '../ai-register/entities/ai-register-job.entity';
 import { ProfileController } from './profile.controller';
 import { ProfileService } from './profile.service';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
+    AuthModule,
     TypeOrmModule.forFeature([
       User,
       Transaction,

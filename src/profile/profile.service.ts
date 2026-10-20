@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   NotFoundException,
   UnauthorizedException,
@@ -61,14 +60,13 @@ export class ProfileService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const user = await this.findUser(userId);
 
-    if (dto.email && dto.email !== user.email) {
-      const existing = await this.userRepository.findOne({
-        where: { email: dto.email },
-      });
-      if (existing) {
-        throw new ConflictException('Ya existe un usuario con este email');
-      }
-      user.email = dto.email;
+    if (
+      dto.email &&
+      dto.email.trim().toLowerCase() !== user.email.toLowerCase()
+    ) {
+      throw new BadRequestException(
+        'Para cambiar el email usa POST /profile/email: se confirma con un código enviado al email nuevo.',
+      );
     }
     if (dto.name !== undefined) user.name = dto.name;
 
