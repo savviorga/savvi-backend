@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -98,6 +99,23 @@ export class AuthController {
   })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({
+    summary: 'Usuario de la sesión',
+    description:
+      'Valida el JWT y devuelve el id, nombre y email del usuario. Lo usan los servicios internos (p. ej. las rutas de IA del frontend) para verificar la sesión.',
+  })
+  @ApiOkResponse({ description: 'Sesión válida' })
+  @ApiUnauthorizedResponse({
+    description: 'Token JWT ausente, inválido o vencido',
+  })
+  me(@Req() req: Request) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.authService.getSessionUser(userId);
   }
 
   @Post('refresh')

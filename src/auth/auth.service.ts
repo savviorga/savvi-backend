@@ -72,6 +72,15 @@ export class AuthService {
     return this.createSession(user);
   }
 
+  /** Datos mínimos del usuario autenticado (validación de sesión entre servicios). */
+  async getSessionUser(userId: string) {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) {
+      throw new UnauthorizedException('Usuario no encontrado');
+    }
+    return { id: user.id, name: user.name, email: user.email };
+  }
+
   /** Emite un JWT nuevo para un usuario con sesión vigente (sesión deslizante). */
   async refreshSession(userId: string) {
     const user = await this.userRepository.findOne({ where: { id: userId } });
