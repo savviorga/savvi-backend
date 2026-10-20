@@ -10,6 +10,7 @@ import {
   IsIn,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
 import {
   TRANSACTION_TYPES,
@@ -54,10 +55,15 @@ export class CreateTransactionDto {
   amount: number;
 
   @ApiProperty({
-    description: 'Id de la categoría (del mismo usuario)',
+    description:
+      'Id de la categoría (del mismo usuario). Opcional en transferencias: sin ella se usa "Transferencias".',
     example: '87a1883c-8464-4d0f-b450-771ca2886c38',
     format: 'uuid',
   })
+  @ValidateIf(
+    (dto: CreateTransactionDto) =>
+      dto.type !== 'transferencia' || dto.categoryId != null,
+  )
   @IsNotEmpty({ message: 'La categoría es requerida' })
   @IsUUID('all', { message: 'La categoría no es válida' })
   categoryId: string;
@@ -70,6 +76,16 @@ export class CreateTransactionDto {
   @IsNotEmpty({ message: 'La cuenta es requerida' })
   @IsUUID('all', { message: 'La cuenta no es válida' })
   account: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Solo transferencias: cuenta destino (del usuario, distinta de `account`). Sin ella, la transferencia es un pago a un tercero.',
+    format: 'uuid',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('all', { message: 'La cuenta destino no es válida' })
+  toAccount?: string | null;
 
   @ApiPropertyOptional({
     description: 'Descripción adicional de la transacción',

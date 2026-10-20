@@ -69,7 +69,7 @@ export class AccountsService {
 
     const [usage] = (await this.accountRepository.query(
       `SELECT
-         (SELECT count(*) FROM finance.transactions WHERE account_id = $1) AS transactions,
+         (SELECT count(*) FROM finance.transactions WHERE account_id = $1 OR to_account_id = $1) AS transactions,
          (SELECT count(*) FROM finance.debts WHERE "accountId" = $1) AS debts,
          (SELECT count(*) FROM finance.transfer_templates WHERE from_account_id = $1) AS templates`,
       [id],

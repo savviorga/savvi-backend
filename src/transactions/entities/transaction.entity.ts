@@ -68,6 +68,13 @@ export class Transaction {
   account: string | null;
 
   /**
+   * Cuenta destino de una transferencia entre cuentas propias (`to_account_id`).
+   * `null` en ingresos, egresos y transferencias a terceros.
+   */
+  @Column({ name: 'to_account_id', type: 'uuid', nullable: true })
+  toAccount: string | null;
+
+  /**
    * Texto que tenía la cuenta antes de ser un id (solo filas viejas que no se
    * pudieron enlazar a una cuenta). Para mostrarlo; no se escribe.
    */

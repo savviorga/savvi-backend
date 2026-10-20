@@ -20,6 +20,8 @@ import { randomUUID } from 'crypto';
 const DOCUMENT_MODULE = 'transactions';
 /** Tope por petición de `POST /transactions/bulk`: el cliente envía lotes más pequeños en cola. */
 const MAX_BULK_ITEMS = 200;
+/** Categoría de las transferencias registradas sin una. */
+const TRANSFER_CATEGORY_NAME = 'Transferencias';
 
 @Injectable()
 export class TransactionsService {
@@ -44,25 +46,49 @@ export class TransactionsService {
     createTransactionDto: CreateTransactionDto,
     manager?: EntityManager,
   ): Promise<Transaction> {
+    const [dto] = await this.withTransferCategory(userId, [
+      createTransactionDto,
+    ]);
     const [category] = await this.findUserCategories(
       userId,
-      [createTransactionDto.categoryId],
+      [dto.categoryId],
       manager,
     );
-    assertCategoryMatchesType(category, createTransactionDto.type);
-    await this.assertUserAccounts(
-      userId,
-      [createTransactionDto.account],
-      manager,
-    );
+    assertCategoryMatchesType(category, dto.type);
+    assertTransferAccounts(dto);
+    await this.assertUserAccounts(userId, accountIdsOf([dto]), manager);
     const repository = this.transactions(manager);
     const transaction = repository.create({
-      ...createTransactionDto,
+      ...dto,
+      toAccount: dto.toAccount ?? null,
       userId,
       legacyCategoryName: category.name,
     });
     const saved = await repository.save(transaction);
     return this.findOne(userId, saved.id, manager);
+  }
+
+  /**
+   * Las transferencias pueden llegar sin categoría: se les asigna
+   * "Transferencias" (se crea la primera vez).
+   */
+  private async withTransferCategory<T extends CreateTransactionDto>(
+    userId: string,
+    rows: T[],
+  ): Promise<T[]> {
+    const missing = rows.filter((row) => !row.categoryId);
+    if (!missing.length) return rows;
+    if (missing.some((row) => row.type !== 'transferencia')) {
+      throw new BadRequestException('La categoría es requerida');
+    }
+    const category = await this.findOrCreateCategory(
+      userId,
+      TRANSFER_CATEGORY_NAME,
+      'egreso',
+    );
+    return rows.map((row) =>
+      row.categoryId ? row : { ...row, categoryId: category.id },
+    );
   }
 
   private transactions(manager?: EntityManager): Repository<Transaction> {
@@ -145,21 +171,21 @@ export class TransactionsService {
         `Máximo ${MAX_BULK_ITEMS} transacciones por petición`,
       );
     }
+    const rows = await this.withTransferCategory(userId, createTransactionsDto);
     const categories = await this.findUserCategories(
       userId,
-      createTransactionsDto.map((row) => row.categoryId),
+      rows.map((row) => row.categoryId),
     );
-    createTransactionsDto.forEach((row, i) =>
-      assertCategoryMatchesType(categories[i], row.type, i + 1),
-    );
-    await this.assertUserAccounts(
-      userId,
-      createTransactionsDto.map((row) => row.account),
-    );
+    rows.forEach((row, i) => {
+      assertCategoryMatchesType(categories[i], row.type, i + 1);
+      assertTransferAccounts(row, i + 1);
+    });
+    await this.assertUserAccounts(userId, accountIdsOf(rows));
     // `save` con un arreglo usa una sola transacción: se guardan todas o ninguna.
     const transactions = this.transactionRepository.create(
-      createTransactionsDto.map((row, i) => ({
+      rows.map((row, i) => ({
         ...row,
+        toAccount: row.toAccount ?? null,
         userId,
         legacyCategoryName: categories[i].name,
       })),
@@ -235,6 +261,8 @@ export class TransactionsService {
     const current = await this.findOne(userId, id);
 
     const { documentsToDelete, filesToAdd, ...fields } = updateTransactionDto;
+    // En transferencias la categoría es opcional: null = dejar la actual.
+    if (fields.categoryId == null) delete fields.categoryId;
 
     if (Object.keys(fields).length > 0) {
       const category =
@@ -248,8 +276,20 @@ export class TransactionsService {
       if (category) {
         assertCategoryMatchesType(category, fields.type ?? current.type);
       }
-      if (fields.account !== undefined) {
-        await this.assertUserAccounts(userId, [fields.account]);
+      // La cuenta destino solo existe en transferencias: si deja de serlo se borra.
+      const next = {
+        type: fields.type ?? current.type,
+        account: fields.account ?? current.account,
+        toAccount:
+          fields.toAccount !== undefined ? fields.toAccount : current.toAccount,
+      };
+      if (next.type !== 'transferencia') {
+        if (fields.toAccount) assertTransferAccounts(next);
+        next.toAccount = null;
+      }
+      assertTransferAccounts(next);
+      if (fields.account !== undefined || fields.toAccount) {
+        await this.assertUserAccounts(userId, accountIdsOf([next]));
       }
       const legacy =
         category && fields.categoryId
@@ -260,7 +300,7 @@ export class TransactionsService {
         fields.account !== undefined ? { legacyAccount: null } : {};
       await this.transactionRepository.update(
         { id, userId },
-        { ...fields, ...legacy, ...legacyAccount },
+        { ...fields, toAccount: next.toAccount, ...legacy, ...legacyAccount },
       );
     }
 
@@ -542,4 +582,32 @@ function assertCategoryMatchesType(
   throw new BadRequestException(
     `${prefix}la categoría "${category.name}" es de ${category.type === 'ingreso' ? 'ingresos' : 'gastos'} y la transacción es un ${type}.`,
   );
+}
+
+/** Cuenta destino válida: solo en transferencias y distinta de la de origen. */
+function assertTransferAccounts(
+  row: { type: string; account?: string | null; toAccount?: string | null },
+  rowNumber?: number,
+): void {
+  if (!row.toAccount) return;
+  const prefix = rowNumber ? `Fila ${rowNumber}: ` : '';
+  if (row.type !== 'transferencia') {
+    throw new BadRequestException(
+      `${prefix}solo las transferencias tienen cuenta destino.`,
+    );
+  }
+  if (row.toAccount === row.account) {
+    throw new BadRequestException(
+      `${prefix}la cuenta destino debe ser distinta de la de origen.`,
+    );
+  }
+}
+
+/** Ids de cuenta (origen y destino) que deben pertenecer al usuario. */
+function accountIdsOf(
+  rows: { account?: string | null; toAccount?: string | null }[],
+): string[] {
+  return rows
+    .flatMap((row) => [row.account, row.toAccount])
+    .filter((id): id is string => Boolean(id));
 }
