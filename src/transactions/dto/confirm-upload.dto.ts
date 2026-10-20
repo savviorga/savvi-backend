@@ -8,6 +8,7 @@ import {
   ValidateNested,
   ArrayMinSize,
   IsArray,
+  MaxLength,
 } from 'class-validator';
 
 export class UploadedFileMetadataDto {
@@ -17,6 +18,7 @@ export class UploadedFileMetadataDto {
   })
   @IsString({ message: 'key es requerido' })
   @IsNotEmpty()
+  @MaxLength(512)
   key: string;
 
   @ApiProperty({
@@ -25,6 +27,7 @@ export class UploadedFileMetadataDto {
   })
   @IsString({ message: 'name es requerido' })
   @IsNotEmpty()
+  @MaxLength(255)
   name: string;
 
   @ApiProperty({

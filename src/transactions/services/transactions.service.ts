@@ -13,6 +13,8 @@ import { Document } from '../entities/document.entity';
 import { Category } from '../../categories/entities/category.entity';
 import { S3Service } from '../../s3/s3.service';
 import { bucket } from '../../infrastructure/config/s3.config';
+import { isUserKey, sanitizeFileName } from '../../s3/s3-keys';
+import { randomUUID } from 'crypto';
 
 const DOCUMENT_MODULE = 'transactions';
 /** Tope por petición de `POST /transactions/bulk`: el cliente envía lotes más pequeños en cola. */
@@ -208,7 +210,7 @@ export class TransactionsService {
    */
   async findOneWithDocuments(userId: string, id: string) {
     const transaction = await this.findOne(userId, id);
-    const documents = await this.buildDocumentsResponse(id);
+    const documents = await this.buildDocumentsResponse(userId, id);
 
     return { ...transaction, documents };
   }
@@ -221,7 +223,7 @@ export class TransactionsService {
     });
 
     if (documents.length) {
-      await this.s3Service.deleteFiles(documents.map((doc) => doc.keyS3));
+      await this.deleteDocumentObjects(userId, documents);
       await this.documentRepository.remove(documents);
     }
 
@@ -241,12 +243,12 @@ export class TransactionsService {
     const documents: Document[] = [];
 
     for (const file of files) {
-      // Nombre único en S3: evita sobrescribir un adjunto previo con el mismo
-      // nombre y mantiene la key 1 a 1 con el documento.
-      const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
+      // Nombre único dentro del prefijo del usuario: evita sobrescribir un
+      // adjunto previo y mantiene la key 1 a 1 con el documento.
+      const uniqueName = `${randomUUID()}-${sanitizeFileName(file.originalname)}`;
 
       const result = await this.s3Service.upload(
-        `transactions/${transactionId}`,
+        `users/${userId}/transactions`,
         { ...file, originalname: uniqueName },
       );
 
@@ -270,6 +272,11 @@ export class TransactionsService {
     };
   }
 
+  /**
+   * Registra archivos que el cliente ya subió a S3 con una URL prefirmada.
+   * Solo acepta keys del propio usuario (las genera `POST /s3/presigned-url`)
+   * que existan en el bucket; el tamaño se toma de S3, no del cliente.
+   */
   async confirmUploadedFiles(
     userId: string,
     transactionId: string,
@@ -277,14 +284,41 @@ export class TransactionsService {
   ) {
     const tx = await this.findOne(userId, transactionId);
 
-    const documents = files.map((f) =>
-      this.documentRepository.create({
-        name: f.name,
-        size: f.size,
-        bucket,
-        keyS3: f.key,
-        module: DOCUMENT_MODULE,
-        refId: tx.id.toString(),
+    const keys = [...new Set(files.map((f) => f.key))];
+    if (keys.length !== files.length) {
+      throw new BadRequestException('Hay archivos repetidos en la petición');
+    }
+    for (const key of keys) {
+      if (!isUserKey(userId, key, DOCUMENT_MODULE)) {
+        throw new BadRequestException(
+          'El archivo no pertenece a tu cuenta. Súbelo de nuevo.',
+        );
+      }
+    }
+
+    const alreadyLinked = await this.documentRepository.count({
+      where: { keyS3: In(keys) },
+    });
+    if (alreadyLinked > 0) {
+      throw new BadRequestException('El archivo ya está adjunto');
+    }
+
+    const documents = await Promise.all(
+      files.map(async (f) => {
+        const info = await this.s3Service.getObjectInfo(f.key);
+        if (!info) {
+          throw new BadRequestException(
+            `El archivo ${f.name} no se encontró en el almacenamiento. Súbelo de nuevo.`,
+          );
+        }
+        return this.documentRepository.create({
+          name: f.name,
+          size: info.size || f.size,
+          bucket,
+          keyS3: f.key,
+          module: DOCUMENT_MODULE,
+          refId: tx.id.toString(),
+        });
       }),
     );
 
@@ -296,7 +330,7 @@ export class TransactionsService {
   async listTransactionDocuments(userId: string, transactionId: string) {
     await this.findOne(userId, transactionId);
 
-    return this.buildDocumentsResponse(transactionId);
+    return this.buildDocumentsResponse(userId, transactionId);
   }
 
   /**
@@ -323,7 +357,7 @@ export class TransactionsService {
       );
     }
 
-    await this.s3Service.deleteFile(document.keyS3);
+    await this.deleteDocumentObjects(userId, [document]);
     await this.documentRepository.remove(document);
 
     return {
@@ -362,7 +396,7 @@ export class TransactionsService {
       );
     }
 
-    await this.s3Service.deleteFiles(documents.map((doc) => doc.keyS3));
+    await this.deleteDocumentObjects(userId, documents);
     await this.documentRepository.remove(documents);
 
     return {
@@ -372,7 +406,28 @@ export class TransactionsService {
     };
   }
 
-  private async buildDocumentsResponse(transactionId: string) {
+  /**
+   * Borra de S3 los objetos de los documentos, pero nunca uno de otro usuario:
+   * se omiten keys de otro prefijo `users/` y las keys antiguas (sin prefijo)
+   * que también estén referenciadas por otro documento.
+   */
+  private async deleteDocumentObjects(userId: string, documents: Document[]) {
+    const keys: string[] = [];
+    for (const doc of documents) {
+      if (doc.keyS3.startsWith('users/')) {
+        if (isUserKey(userId, doc.keyS3)) keys.push(doc.keyS3);
+        continue;
+      }
+      const references = await this.documentRepository.count({
+        where: { keyS3: doc.keyS3 },
+      });
+      if (references <= 1) keys.push(doc.keyS3);
+    }
+    await this.s3Service.deleteFiles(keys);
+  }
+
+  /** Documentos con URL de descarga; nunca firma keys de otro usuario. */
+  private async buildDocumentsResponse(userId: string, transactionId: string) {
     const documents = await this.documentRepository.find({
       where: {
         module: DOCUMENT_MODULE,
@@ -388,7 +443,10 @@ export class TransactionsService {
         id: doc.id,
         name: doc.name,
         size: Number(doc.size),
-        url: await this.s3Service.getDownloadUrl(doc.keyS3, 3600),
+        url:
+          doc.keyS3.startsWith('users/') && !isUserKey(userId, doc.keyS3)
+            ? null
+            : await this.s3Service.getDownloadUrl(doc.keyS3, 3600),
       })),
     );
   }
