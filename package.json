@@ -22,7 +22,11 @@
     "seed": "ts-node -r tsconfig-paths/register src/seeds/seed.ts",
     "migration:generate": "npm run typeorm -- migration:generate src/migrations/InitMigration -d src/config/typeorm.config.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/config/typeorm.config.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d src/config/typeorm.config.ts"
+    "migration:revert": "npm run typeorm -- migration:revert -d src/config/typeorm.config.ts",
+    "migration:show": "npm run typeorm -- migration:show -d src/config/typeorm.config.ts",
+    "migration:show:prod": "node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:show -d dist/config/typeorm.config.js",
+    "migration:run:prod": "node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:run -d dist/config/typeorm.config.js",
+    "migration:revert:prod": "node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:revert -d dist/config/typeorm.config.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.943.0",

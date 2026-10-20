@@ -19,12 +19,12 @@ API REST de **Savvi**, construida con [NestJS 11](https://nestjs.com/) + [TypeOR
 
 ## Variables de entorno
 
-Crea un archivo `.env` en la raíz:
+Copia `.env.example` a `.env` y complétalo. Las principales:
 
 ```env
 PORT=3000
 
-# PostgreSQL
+# PostgreSQL (esquema "finance")
 DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
@@ -32,12 +32,35 @@ DB_PASSWORD=tu_password
 DB_NAME=savvi
 # DB_SSL=false   # opcional, ver nota abajo
 
+# Firma de los JWT: OBLIGATORIO, mínimo 32 caracteres (openssl rand -base64 48)
+JWT_SECRET=
+
 # AWS S3
 AWS_ACCESS_KEY_ID=...
 AWS_SECRET_ACCESS_KEY=...
 AWS_REGION=us-east-1
 AWS_S3_BUCKET=savvi-bucket
+
+# Dominios del frontend, separados por comas: OBLIGATORIO en producción
+CORS_ORIGINS=https://app.savvi.co
+
+# Email
+EMAIL_PROVIDER=resend
+EMAIL_FROM=
+RESEND_API_KEY=
 ```
+
+Opcionales:
+
+| Variable | Para qué |
+|---|---|
+| `TRUST_PROXY=1` | La API está detrás de Nginx/Caddy: toma la IP real del cliente (límites de intentos de login). |
+| `S3_MANAGE_CORS=false` | No reescribir el CORS del bucket al arrancar (si se administra desde la infraestructura). |
+| `AI_DAILY_LIMIT_USD`, `AI_MONTHLY_LIMIT_USD`, `AI_REQUESTS_PER_MINUTE` | Topes de Savvi IA por usuario (por defecto 1 USD/día, 10 USD/mes, 20 peticiones/min). |
+| `SWAGGER_ENABLED=true` | Expone `/docs` aunque `NODE_ENV=production`. |
+| `DB_LOGGING=true` | Registra todas las queries SQL (solo para depurar). |
+
+> Sin `JWT_SECRET` (o con `CORS_ORIGINS` vacío en producción) la API no arranca y lo dice en el log.
 
 > El `.env` está excluido de Git y de la imagen Docker. Nunca lo subas al repositorio.
 
@@ -63,15 +86,47 @@ npm run start          # sin watch
 npm run start:prod     # producción (sobre dist/)
 ```
 
-La API queda disponible en `http://localhost:3000` y la documentación Swagger en **`http://localhost:3000/docs`**.
+La API queda disponible en `http://localhost:3000` y la documentación Swagger en **`http://localhost:3000/docs`** (en producción `/docs` está apagado salvo que definas `SWAGGER_ENABLED=true`).
 
 ## Migraciones
 
+El esquema se cambia **solo con migraciones** (`synchronize` está apagado). La API no las aplica sola al arrancar: hay que correrlas en cada despliegue que las traiga.
+
+### En desarrollo (TypeScript, con `ts-node`)
+
 ```bash
+npm run migration:show       # lista las migraciones: [X] aplicada, [ ] pendiente
+npm run migration:run        # aplica las pendientes
+npm run migration:revert     # revierte la última
 npm run migration:generate   # genera una migración a partir de las entidades
-npm run migration:run        # aplica las migraciones pendientes
-npm run migration:revert     # revierte la última migración
 ```
+
+### En producción (sobre `dist/`)
+
+En producción solo existe el código compilado en `dist/`: no hay `src/` ni `ts-node`
+(son dependencias de desarrollo), así que `npm run migration:run` **no funciona ahí**.
+Usa las variantes `:prod`, que corren el CLI de TypeORM con
+`dist/config/typeorm.config.js` y las migraciones compiladas en `dist/migrations/`:
+
+```bash
+npm run build                  # solo fuera de Docker: compila src/ -> dist/ (borra dist/ antes)
+npm run migration:show:prod    # qué falta aplicar (sale con código 1 si hay pendientes)
+npm run migration:run:prod     # aplica las pendientes
+npm run migration:revert:prod  # revierte la última, si algo salió mal
+```
+
+Equivalen a:
+
+```bash
+node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:run -d dist/config/typeorm.config.js
+```
+
+- Toman la base de las variables de entorno (`DB_*`); si existe un `.env` en la carpeta también lo leen, pero **no pisan** variables ya definidas.
+- Una migración que no está compilada en `dist/` no existe para estos comandos: compila (o reconstruye la imagen) antes de migrar.
+- Las pendientes se aplican en una sola transacción: si una falla, no queda ninguna a medias.
+- **Haz un respaldo de la base antes de migrar en producción** (`pg_dump`), sobre todo si la migración transforma datos.
+
+Para Docker, ver [Desplegar una versión nueva](#desplegar-una-versión-nueva-git-pull).
 
 ## Datos de ejemplo (seed)
 
@@ -98,7 +153,8 @@ plantillas de transferencia con recordatorios, adjuntos y jobs de IA.
 > lista de documentos funciona, pero descargar la URL prefirmada responde 404.
 
 Apunta a la base del `.env`, así que revisa `DB_NAME` antes de ejecutarlo. Si las
-tablas no existen, corre primero `npm run migration:run`.
+tablas no existen, corre primero `npm run migration:run`. Es solo para desarrollo:
+usa `ts-node`, que no está en la imagen de producción.
 
 ## Build
 
@@ -125,11 +181,14 @@ docker build -t savvi-backed .
 ### Ejecutar el contenedor
 
 ```bash
+# Primera vez: crear las tablas con la misma imagen
+docker run --rm --env-file .env savvi-backed npm run migration:run:prod
+
 # Toma las variables del .env local
 docker run -d --name savvi-backed --env-file .env --restart unless-stopped -p 4051:3000 savvi-backed
 ```
 
-La API quedará en `http://localhost:3000` y Swagger en `http://localhost:3000/docs`.
+La API quedará en `http://localhost:4051` (el puerto de la derecha en `-p` debe ser el `PORT` del `.env`; la imagen usa 3000 si no lo defines).
 
 ### ¿Modifiqué el archivo `.env`?
 
@@ -141,26 +200,48 @@ docker run -d --name savvi-backed --env-file .env --restart unless-stopped -p 40
 
 ```
 
-### ¿Traje cambios nuevos del repositorio? (`git pull`)
+### Desplegar una versión nueva (`git pull`)
 
-Si los cambios tocan el código fuente, dependencias (`package.json`/`package-lock.json`) o el `Dockerfile`, hay que **reconstruir la imagen** y recrear el contenedor:
+Si los cambios tocan el código fuente, dependencias (`package.json`/`package-lock.json`), migraciones o el `Dockerfile`, hay que **reconstruir la imagen**, **migrar con la imagen nueva** y recrear el contenedor:
 
 ```bash
 git pull
 docker build -t savvi-backed .
 
+# 1. Respaldo de la base (recomendado si hay migraciones)
+pg_dump -h <DB_HOST> -U <DB_USERNAME> -d <DB_NAME> -n finance -Fc -f savvi-$(date +%F).dump
+
+# 2. Ver y aplicar las migraciones con la imagen NUEVA (contenedor temporal)
+docker run --rm --env-file .env savvi-backed npm run migration:show:prod
+docker run --rm --env-file .env savvi-backed npm run migration:run:prod
+
+# 3. Reemplazar el contenedor
 docker stop savvi-backed && docker rm savvi-backed
 docker run -d --name savvi-backed --env-file .env --restart unless-stopped -p 4051:3000 savvi-backed
 ```
 
-Si los cambios incluyen **migraciones de base de datos**, ejecútalas dentro del contenedor en ejecución:
+> **No uses `docker exec savvi-backed npm run migration:run`**: dentro del contenedor no existen `src/` ni `ts-node`, y además el contenedor en ejecución tiene el `dist/` de la versión **anterior**, sin las migraciones nuevas. Migra siempre con la imagen recién construida, antes de reemplazar el contenedor.
+
+Si algo sale mal después de migrar:
 
 ```bash
-docker exec savvi-backed npm run migration:run
+docker run --rm --env-file .env savvi-backed npm run migration:revert:prod   # revierte la última; repítelo para ir más atrás
 ```
 
-> Si solo cambió el `.env` → recrear el contenedor (sin reconstruir).
-> Si cambió el código, las dependencias o el `Dockerfile` → reconstruir la imagen (`docker build`).
+> Si solo cambió el `.env` → recrear el contenedor (sin reconstruir ni migrar).
+> Si cambió el código, las dependencias, las migraciones o el `Dockerfile` → reconstruir la imagen, migrar y recrear.
+
+### Migraciones recientes
+
+Se aplican en este orden con `migration:run:prod`:
+
+| Migración | Qué hace |
+|---|---|
+| `1776000000000-AddLoginLockoutToUsers` | Contador de intentos fallidos y bloqueo temporal del login. |
+| `1776100000000-CreateAiUsageTable` | Tabla `ai_usage` para los topes de gasto de Savvi IA. |
+| `1776200000000-LinkTransactionsToAccounts` | La cuenta de cada transacción pasa de texto a `account_id` (FK). Enlaza las filas existentes por id o por nombre único; el texto viejo queda en `legacy_account`. **Transforma datos: respalda antes.** |
+| `1776300000000-AddSessionSecurity` | `tokenVersion` en usuarios (cerrar sesiones al cambiar contraseña o email) y datos del reto 2FA. |
+| `1776400000000-AddTransferDestinationToTransactions` | `to_account_id`: cuenta destino de las transferencias entre cuentas propias. |
 
 ## Tests
 
