@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -8,7 +9,14 @@ import { getCorsOrigins } from './config/cors';
 async function bootstrap() {
   assertRequiredEnv();
   getCorsOrigins();
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  // Detrás de un proxy (Nginx, Caddy…) la IP real llega en X-Forwarded-For:
+  // TRUST_PROXY indica cuántos saltos confiar. Sin proxy no se define.
+  const trustProxy = Number(process.env.TRUST_PROXY);
+  if (Number.isInteger(trustProxy) && trustProxy > 0) {
+    app.set('trust proxy', trustProxy);
+  }
 
   app.useGlobalPipes(
     new ValidationPipe({

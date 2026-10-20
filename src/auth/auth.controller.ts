@@ -23,6 +23,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { AuthThrottle } from './auth-throttle';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -49,6 +50,7 @@ export class AuthController {
   ) {}
 
   @Post('register')
+  @AuthThrottle.register()
   @ApiOperation({
     summary: 'Registrar un nuevo usuario',
     description:
@@ -67,6 +69,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Iniciar sesión',
@@ -87,7 +90,8 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'Datos inválidos' })
   @ApiUnauthorizedResponse({ description: 'Email o contraseña incorrectos' })
   @ApiTooManyRequestsResponse({
-    description: 'Con 2FA: ya se envió un código hace menos de 60 s',
+    description:
+      'Demasiados intentos (por IP o cuenta bloqueada temporalmente) o, con 2FA, código enviado hace menos de 60 s',
   })
   @ApiInternalServerErrorResponse({
     description: 'Con 2FA: no se pudo enviar el email',
@@ -115,6 +119,7 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @AuthThrottle.email()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Solicitar código de recuperación de contraseña',
@@ -132,6 +137,7 @@ export class AuthController {
   }
 
   @Post('verify-reset-code')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Verificar código de recuperación',
@@ -150,6 +156,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restablecer contraseña',

@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './auth/guards/app-throttler.guard';
+import { GLOBAL_THROTTLE } from './auth/auth-throttle';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -20,6 +24,7 @@ import { EmailModule } from './email/email.module';
   imports: [
     TypeOrmModule.forRoot(dataSourceOptions),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot([GLOBAL_THROTTLE]),
     EmailModule,
     AuthModule,
     TransactionsModule,
@@ -33,6 +38,6 @@ import { EmailModule } from './email/email.module';
     ProfileModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: AppThrottlerGuard }],
 })
 export class AppModule {}
