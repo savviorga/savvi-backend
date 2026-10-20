@@ -52,7 +52,8 @@ export class AccountsController {
   @Get()
   @ApiOperation({
     summary: 'Listar cuentas del usuario',
-    description: 'Devuelve todas las cuentas asociadas al usuario autenticado.',
+    description:
+      'Devuelve todas las cuentas del usuario. `balance` es el saldo inicial y `currentBalance` el saldo actual (inicial + ingresos − egresos ± transferencias).',
   })
   @ApiOkResponse({ description: 'Listado de cuentas' })
   findAll(@Req() req: Request) {

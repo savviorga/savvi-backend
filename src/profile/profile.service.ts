@@ -20,6 +20,10 @@ import { AiRegisterJob } from '../ai-register/entities/ai-register-job.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import {
+  currentBalanceOf,
+  loadAccountMovements,
+} from '../accounts/account-balances';
+import {
   currentMonthInBogota,
   monthKey,
   monthStartISO,
@@ -396,21 +400,30 @@ export class ProfileService {
       .addSelect('COUNT(*) FILTER (WHERE a.isActive)', 'active')
       .addSelect('COUNT(*) FILTER (WHERE a.isCredit)', 'credit')
       .addSelect(
-        'COALESCE(SUM(a.balance) FILTER (WHERE NOT a.isCredit), 0)',
-        'totalBalance',
-      )
-      .addSelect(
         'COALESCE(SUM(a.creditLimit) FILTER (WHERE a.isCredit), 0)',
         'totalCreditLimit',
       )
       .where('a.userId = :userId', { userId })
       .getRawOne<Record<string, string>>();
 
+    // Saldo real de las cuentas de débito: saldo inicial + movimientos.
+    const [debitAccounts, movements] = await Promise.all([
+      this.accountRepository.find({
+        select: { id: true, balance: true },
+        where: { userId, isCredit: false },
+      }),
+      loadAccountMovements(this.accountRepository, userId),
+    ]);
+    const totalBalance = debitAccounts.reduce(
+      (sum, account) => sum + currentBalanceOf(account, movements),
+      0,
+    );
+
     return {
       count: toNumber(row?.count),
       active: toNumber(row?.active),
       credit: toNumber(row?.credit),
-      totalBalance: round2(toNumber(row?.totalBalance)),
+      totalBalance: round2(totalBalance),
       totalCreditLimit: round2(toNumber(row?.totalCreditLimit)),
     };
   }

@@ -8,6 +8,11 @@ import { UpdateAccountDto } from './dto/update-account.dto';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Account } from './entities/account.entity';
+import {
+  AccountWithBalance,
+  loadAccountMovements,
+  withCurrentBalance,
+} from './account-balances';
 
 @Injectable()
 export class AccountsService {
@@ -19,24 +24,33 @@ export class AccountsService {
   async create(
     userId: string,
     createAccountDto: CreateAccountDto,
-  ): Promise<Account> {
+  ): Promise<AccountWithBalance> {
     const { initialBalance, ...rest } = createAccountDto;
     const account = this.accountRepository.create({
       ...rest,
       userId,
       balance: initialBalance ?? 0,
     });
-    return this.accountRepository.save(account);
+    return this.withBalance(userId, await this.accountRepository.save(account));
   }
 
-  findAll(userId: string): Promise<Account[]> {
-    return this.accountRepository.find({
-      where: { userId },
-      order: { name: 'ASC' },
-    });
+  /** Cuentas del usuario con `currentBalance` (saldo inicial + movimientos). */
+  async findAll(userId: string): Promise<AccountWithBalance[]> {
+    const [accounts, movements] = await Promise.all([
+      this.accountRepository.find({
+        where: { userId },
+        order: { name: 'ASC' },
+      }),
+      loadAccountMovements(this.accountRepository, userId),
+    ]);
+    return accounts.map((account) => withCurrentBalance(account, movements));
   }
 
-  async findOne(userId: string, id: string): Promise<Account> {
+  async findOne(userId: string, id: string): Promise<AccountWithBalance> {
+    return this.withBalance(userId, await this.findEntity(userId, id));
+  }
+
+  private async findEntity(userId: string, id: string): Promise<Account> {
     const account = await this.accountRepository.findOne({
       where: { id, userId },
     });
@@ -46,18 +60,29 @@ export class AccountsService {
     return account;
   }
 
+  private async withBalance(
+    userId: string,
+    account: Account,
+  ): Promise<AccountWithBalance> {
+    const movements = await loadAccountMovements(
+      this.accountRepository,
+      userId,
+    );
+    return withCurrentBalance(account, movements);
+  }
+
   async update(
     userId: string,
     id: string,
     updateAccountDto: UpdateAccountDto,
-  ): Promise<Account> {
-    const account = await this.findOne(userId, id);
+  ): Promise<AccountWithBalance> {
+    const account = await this.findEntity(userId, id);
     const { initialBalance, ...rest } = updateAccountDto;
     Object.assign(account, rest);
     if (initialBalance !== undefined) {
       account.balance = initialBalance;
     }
-    return this.accountRepository.save(account);
+    return this.withBalance(userId, await this.accountRepository.save(account));
   }
 
   /**
@@ -65,7 +90,7 @@ export class AccountsService {
    * pagos recurrentes se responde 409: se puede desactivar en su lugar.
    */
   async remove(userId: string, id: string): Promise<void> {
-    await this.findOne(userId, id);
+    await this.findEntity(userId, id);
 
     const [usage] = (await this.accountRepository.query(
       `SELECT
