@@ -58,9 +58,32 @@ describe('TransactionsService – documentos', () => {
     expect(result.documents[0]).toMatchObject({ keyS3: key, size: 2048 });
   });
 
+  it('acepta evidencias del chat de Savvi IA del mismo usuario', async () => {
+    const key = `users/${userId}/savvi-ia/abc-recibo.jpg`;
+    const result = await service.confirmUploadedFiles(userId, txId, [
+      { key, name: 'recibo.jpg', size: 1 },
+    ]);
+    expect(result.documents[0]).toMatchObject({ keyS3: key });
+  });
+
+  it('rechaza un archivo ya adjunto a la misma transacción', async () => {
+    documentRepository.count.mockResolvedValue(1);
+    await expect(
+      service.confirmUploadedFiles(userId, txId, [
+        {
+          key: `users/${userId}/savvi-ia/abc-recibo.jpg`,
+          name: 'r.jpg',
+          size: 1,
+        },
+      ]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('rechaza keys de otro usuario o sin prefijo', async () => {
     for (const key of [
       'users/otro/transactions/abc-factura.pdf',
+      'users/otro/savvi-ia/abc-recibo.jpg',
+      `users/${userId}/otra-carpeta/x.pdf`,
       'transactions/tx-9/1714-factura.pdf',
       'savvi-ia/123-recibo.jpg',
     ]) {
@@ -86,14 +109,26 @@ describe('TransactionsService – documentos', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('no borra de S3 objetos de otro usuario ni keys antiguas compartidas', async () => {
+  it('no borra de S3 objetos de otro usuario ni archivos que siguen siendo soporte de otro documento', async () => {
     const own = { id: 'd1', keyS3: `users/${userId}/transactions/a.pdf` };
     const foreign = { id: 'd2', keyS3: 'users/otro/transactions/b.pdf' };
     const legacyShared = { id: 'd3', keyS3: 'transactions/tx-9/c.pdf' };
-    documentRepository.find.mockResolvedValue([own, foreign, legacyShared]);
-    documentRepository.count.mockResolvedValue(2);
+    const sharedEvidence = {
+      id: 'd4',
+      keyS3: `users/${userId}/savvi-ia/r.jpg`,
+    };
+    documentRepository.find.mockResolvedValue([
+      own,
+      foreign,
+      legacyShared,
+      sharedEvidence,
+    ]);
+    documentRepository.count.mockImplementation(
+      ({ where }: { where: { keyS3: string } }) =>
+        Promise.resolve(where.keyS3 === own.keyS3 ? 1 : 2),
+    );
 
-    await service.removeDocuments(userId, txId, ['d1', 'd2', 'd3']);
+    await service.removeDocuments(userId, txId, ['d1', 'd2', 'd3', 'd4']);
 
     expect(s3Service.deleteFiles).toHaveBeenCalledWith([own.keyS3]);
   });

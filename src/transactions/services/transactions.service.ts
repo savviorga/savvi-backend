@@ -316,6 +316,8 @@ export class TransactionsService {
    * Registra archivos que el cliente ya subió a S3 con una URL prefirmada.
    * Solo acepta keys del propio usuario (las genera `POST /s3/presigned-url`)
    * que existan en el bucket; el tamaño se toma de S3, no del cliente.
+   * También acepta evidencias subidas en el chat de Savvi IA (`savvi-ia/`): un
+   * mismo recibo puede quedar como soporte de varias transacciones.
    */
   async confirmUploadedFiles(
     userId: string,
@@ -329,7 +331,10 @@ export class TransactionsService {
       throw new BadRequestException('Hay archivos repetidos en la petición');
     }
     for (const key of keys) {
-      if (!isUserKey(userId, key, DOCUMENT_MODULE)) {
+      if (
+        !isUserKey(userId, key, DOCUMENT_MODULE) &&
+        !isUserKey(userId, key, 'savvi-ia')
+      ) {
         throw new BadRequestException(
           'El archivo no pertenece a tu cuenta. Súbelo de nuevo.',
         );
@@ -337,10 +342,12 @@ export class TransactionsService {
     }
 
     const alreadyLinked = await this.documentRepository.count({
-      where: { keyS3: In(keys) },
+      where: { keyS3: In(keys), module: DOCUMENT_MODULE, refId: tx.id },
     });
     if (alreadyLinked > 0) {
-      throw new BadRequestException('El archivo ya está adjunto');
+      throw new BadRequestException(
+        'El archivo ya está adjunto a esta transacción',
+      );
     }
 
     const documents = await Promise.all(
@@ -447,15 +454,14 @@ export class TransactionsService {
   }
 
   /**
-   * Borra de S3 los objetos de los documentos, pero nunca uno de otro usuario:
-   * se omiten keys de otro prefijo `users/` y las keys antiguas (sin prefijo)
-   * que también estén referenciadas por otro documento.
+   * Borra de S3 los objetos de los documentos, pero nunca uno de otro usuario
+   * (keys de otro prefijo `users/`) ni uno que siga siendo soporte de otro
+   * documento (p. ej. un recibo de Savvi IA adjunto a varias transacciones).
    */
   private async deleteDocumentObjects(userId: string, documents: Document[]) {
     const keys: string[] = [];
     for (const doc of documents) {
-      if (doc.keyS3.startsWith('users/')) {
-        if (isUserKey(userId, doc.keyS3)) keys.push(doc.keyS3);
+      if (doc.keyS3.startsWith('users/') && !isUserKey(userId, doc.keyS3)) {
         continue;
       }
       const references = await this.documentRepository.count({
