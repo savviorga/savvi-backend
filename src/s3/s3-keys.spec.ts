@@ -1,5 +1,6 @@
 import { BadRequestException } from '@nestjs/common';
 import {
+  normalizeMimeType,
   buildUserKey,
   isUserKey,
   resolveUploadModule,
@@ -35,5 +36,10 @@ describe('s3-keys', () => {
     expect(isUserKey('u2', key)).toBe(false);
     expect(isUserKey('u1', 'users/u1/../u2/x.pdf')).toBe(false);
     expect(isUserKey('u1', 'transactions/abc/x.pdf')).toBe(false);
+  });
+
+  it('normaliza el MIME de las notas de voz', () => {
+    expect(normalizeMimeType('audio/webm;codecs=opus')).toBe('audio/webm');
+    expect(normalizeMimeType(' Image/JPEG ')).toBe('image/jpeg');
   });
 });

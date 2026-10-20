@@ -1,4 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
+import { normalizeMimeType } from '../s3-keys';
 import {
   IsString,
   IsNotEmpty,
@@ -45,6 +47,7 @@ export class CreatePresignedUrlDto {
     enum: ALLOWED_CONTENT_TYPES,
     example: 'application/pdf',
   })
+  @Transform(({ value }: { value: unknown }) => normalizeMimeType(value))
   @IsString({ message: 'contentType debe ser un string' })
   @IsNotEmpty({ message: 'contentType es requerido' })
   contentType: string;

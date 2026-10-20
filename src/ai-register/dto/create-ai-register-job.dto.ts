@@ -1,5 +1,14 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsNotEmpty, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
+import { Transform } from 'class-transformer';
+import { normalizeMimeType } from '../../s3/s3-keys';
+import {
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsString,
+  MaxLength,
+  Min,
+} from 'class-validator';
 
 export class CreateAiRegisterJobDto {
   @ApiProperty({
@@ -32,6 +41,7 @@ export class CreateAiRegisterJobDto {
     description: 'MIME type del archivo',
     example: 'image/jpeg',
   })
+  @Transform(({ value }: { value: unknown }) => normalizeMimeType(value))
   @IsString()
   @IsNotEmpty()
   @MaxLength(120)

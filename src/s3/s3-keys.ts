@@ -62,3 +62,13 @@ export function isUserKey(
   const prefix = `${userPrefix(userId)}${module ? `${module}/` : ''}`;
   return key.startsWith(prefix) && key.length > prefix.length;
 }
+
+/**
+ * Tipo base sin parámetros (`audio/webm;codecs=opus` → `audio/webm`): los
+ * navegadores agregan `codecs` al grabar audio.
+ */
+export function normalizeMimeType(value: unknown): unknown {
+  return typeof value === 'string'
+    ? value.split(';')[0].trim().toLowerCase()
+    : value;
+}
