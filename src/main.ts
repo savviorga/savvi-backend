@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { assertRequiredEnv } from './config/env';
 import { getCorsOrigins } from './config/cors';
+import { QueryFailedFilter } from './common/filters/query-failed.filter';
 
 async function bootstrap() {
   assertRequiredEnv();
@@ -30,6 +31,8 @@ async function bootstrap() {
   if (Number.isInteger(trustProxy) && trustProxy > 0) {
     app.set('trust proxy', trustProxy);
   }
+
+  app.useGlobalFilters(new QueryFailedFilter());
 
   app.useGlobalPipes(
     new ValidationPipe({

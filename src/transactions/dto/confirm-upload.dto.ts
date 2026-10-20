@@ -9,6 +9,7 @@ import {
   ArrayMinSize,
   IsArray,
   MaxLength,
+  IsUUID,
 } from 'class-validator';
 
 export class UploadedFileMetadataDto {
@@ -48,6 +49,7 @@ export class ConfirmUploadDto {
   })
   @IsString({ message: 'transactionId es requerido' })
   @IsNotEmpty()
+  @IsUUID('all', { message: 'transactionId no es válido' })
   transactionId: string;
 
   @ApiProperty({

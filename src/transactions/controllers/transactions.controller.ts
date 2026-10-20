@@ -211,7 +211,7 @@ export class TransactionsController {
   })
   uploadFiles(
     @Req() req: Request,
-    @Body('transactionId') transactionId: string,
+    @Body('transactionId', ParseUUIDPipe) transactionId: string,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     const userId = (req.user as { userId: string }).userId;
