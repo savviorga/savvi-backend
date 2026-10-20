@@ -22,7 +22,11 @@
     "seed": "ts-node -r tsconfig-paths/register src/seeds/seed.ts",
     "migration:generate": "npm run typeorm -- migration:generate src/migrations/InitMigration -d src/config/typeorm.config.ts",
     "migration:run": "npm run typeorm -- migration:run -d src/config/typeorm.config.ts",
-    "migration:revert": "npm run typeorm -- migration:revert -d src/config/typeorm.config.ts"
+    "migration:revert": "npm run typeorm -- migration:revert -d src/config/typeorm.config.ts",
+    "migration:show": "npm run typeorm -- migration:show -d src/config/typeorm.config.ts",
+    "migration:show:prod": "node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:show -d dist/config/typeorm.config.js",
+    "migration:run:prod": "node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:run -d dist/config/typeorm.config.js",
+    "migration:revert:prod": "node -r ./register-paths.js ./node_modules/typeorm/cli.js migration:revert -d dist/config/typeorm.config.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.943.0",
@@ -35,10 +39,12 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/swagger": "^11.2.3",
+    "@nestjs/throttler": "^6.7.1",
     "@nestjs/typeorm": "^11.0.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.3",
+    "helmet": "^8.3.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "pg": "^8.16.3",

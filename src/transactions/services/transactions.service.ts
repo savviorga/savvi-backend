@@ -7,16 +7,21 @@ import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { UploadedFileMetadataDto } from '../dto/confirm-upload.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Transaction } from '../entities/transaction.entity';
 import { Document } from '../entities/document.entity';
 import { Category } from '../../categories/entities/category.entity';
+import { Account } from '../../accounts/entities/account.entity';
 import { S3Service } from '../../s3/s3.service';
 import { bucket } from '../../infrastructure/config/s3.config';
+import { isUserKey, sanitizeFileName } from '../../s3/s3-keys';
+import { randomUUID } from 'crypto';
 
 const DOCUMENT_MODULE = 'transactions';
 /** Tope por petición de `POST /transactions/bulk`: el cliente envía lotes más pequeños en cola. */
 const MAX_BULK_ITEMS = 200;
+/** Categoría de las transferencias registradas sin una. */
+const TRANSFER_CATEGORY_NAME = 'Transferencias';
 
 @Injectable()
 export class TransactionsService {
@@ -28,22 +33,68 @@ export class TransactionsService {
     @InjectRepository(Category)
     private readonly categoryRepository: Repository<Category>,
     private readonly s3Service: S3Service,
+    @InjectRepository(Account)
+    private readonly accountRepository: Repository<Account>,
   ) {}
 
+  /**
+   * Crea una transacción. Con `manager` corre dentro de una transacción de
+   * base de datos ajena (p. ej. el abono a una deuda), para guardar todo o nada.
+   */
   async create(
     userId: string,
     createTransactionDto: CreateTransactionDto,
+    manager?: EntityManager,
   ): Promise<Transaction> {
-    const [category] = await this.findUserCategories(userId, [
-      createTransactionDto.categoryId,
+    const [dto] = await this.withTransferCategory(userId, [
+      createTransactionDto,
     ]);
-    const transaction = this.transactionRepository.create({
-      ...createTransactionDto,
+    const [category] = await this.findUserCategories(
+      userId,
+      [dto.categoryId],
+      manager,
+    );
+    assertCategoryMatchesType(category, dto.type);
+    assertTransferAccounts(dto);
+    await this.assertUserAccounts(userId, accountIdsOf([dto]), manager);
+    const repository = this.transactions(manager);
+    const transaction = repository.create({
+      ...dto,
+      toAccount: dto.toAccount ?? null,
       userId,
       legacyCategoryName: category.name,
     });
-    const saved = await this.transactionRepository.save(transaction);
-    return this.findOne(userId, saved.id);
+    const saved = await repository.save(transaction);
+    return this.findOne(userId, saved.id, manager);
+  }
+
+  /**
+   * Las transferencias pueden llegar sin categoría: se les asigna
+   * "Transferencias" (se crea la primera vez).
+   */
+  private async withTransferCategory<T extends CreateTransactionDto>(
+    userId: string,
+    rows: T[],
+  ): Promise<T[]> {
+    const missing = rows.filter((row) => !row.categoryId);
+    if (!missing.length) return rows;
+    if (missing.some((row) => row.type !== 'transferencia')) {
+      throw new BadRequestException('La categoría es requerida');
+    }
+    const category = await this.findOrCreateCategory(
+      userId,
+      TRANSFER_CATEGORY_NAME,
+      'egreso',
+    );
+    return rows.map((row) =>
+      row.categoryId ? row : { ...row, categoryId: category.id },
+    );
+  }
+
+  private transactions(manager?: EntityManager): Repository<Transaction> {
+    return manager
+      ? manager.getRepository(Transaction)
+      : this.transactionRepository;
   }
 
   /**
@@ -74,9 +125,13 @@ export class TransactionsService {
   private async findUserCategories(
     userId: string,
     categoryIds: string[],
+    manager?: EntityManager,
   ): Promise<Category[]> {
     const uniqueIds = [...new Set(categoryIds)];
-    const found = await this.categoryRepository.find({
+    const repository = manager
+      ? manager.getRepository(Category)
+      : this.categoryRepository;
+    const found = await repository.find({
       where: { id: In(uniqueIds), userId },
     });
     const byId = new Map(found.map((category) => [category.id, category]));
@@ -84,6 +139,24 @@ export class TransactionsService {
       throw new BadRequestException('La categoría no existe');
     }
     return categoryIds.map((id) => byId.get(id)!);
+  }
+
+  /** Valida que las cuentas existan y sean del usuario. */
+  private async assertUserAccounts(
+    userId: string,
+    accountIds: string[],
+    manager?: EntityManager,
+  ): Promise<void> {
+    const uniqueIds = [...new Set(accountIds)];
+    const repository = manager
+      ? manager.getRepository(Account)
+      : this.accountRepository;
+    const found = await repository.count({
+      where: { id: In(uniqueIds), userId },
+    });
+    if (found !== uniqueIds.length) {
+      throw new BadRequestException('La cuenta no existe');
+    }
   }
 
   async createBulk(
@@ -98,14 +171,21 @@ export class TransactionsService {
         `Máximo ${MAX_BULK_ITEMS} transacciones por petición`,
       );
     }
+    const rows = await this.withTransferCategory(userId, createTransactionsDto);
     const categories = await this.findUserCategories(
       userId,
-      createTransactionsDto.map((row) => row.categoryId),
+      rows.map((row) => row.categoryId),
     );
+    rows.forEach((row, i) => {
+      assertCategoryMatchesType(categories[i], row.type, i + 1);
+      assertTransferAccounts(row, i + 1);
+    });
+    await this.assertUserAccounts(userId, accountIdsOf(rows));
     // `save` con un arreglo usa una sola transacción: se guardan todas o ninguna.
     const transactions = this.transactionRepository.create(
-      createTransactionsDto.map((row, i) => ({
+      rows.map((row, i) => ({
         ...row,
+        toAccount: row.toAccount ?? null,
         userId,
         legacyCategoryName: categories[i].name,
       })),
@@ -154,8 +234,12 @@ export class TransactionsService {
     }));
   }
 
-  async findOne(userId: string, id: string): Promise<Transaction> {
-    const transaction = await this.transactionRepository.findOne({
+  async findOne(
+    userId: string,
+    id: string,
+    manager?: EntityManager,
+  ): Promise<Transaction> {
+    const transaction = await this.transactions(manager).findOne({
       where: { id, userId },
       relations: { category: { parent: true } },
     });
@@ -174,21 +258,49 @@ export class TransactionsService {
     id: string,
     updateTransactionDto: UpdateTransactionDto,
   ) {
-    await this.findOne(userId, id);
+    const current = await this.findOne(userId, id);
 
     const { documentsToDelete, filesToAdd, ...fields } = updateTransactionDto;
+    // En transferencias la categoría es opcional: null = dejar la actual.
+    if (fields.categoryId == null) delete fields.categoryId;
 
     if (Object.keys(fields).length > 0) {
-      const legacy = fields.categoryId
-        ? {
-            legacyCategoryName: (
-              await this.findUserCategories(userId, [fields.categoryId])
-            )[0].name,
-          }
-        : {};
+      const category =
+        fields.categoryId !== undefined || fields.type !== undefined
+          ? (
+              await this.findUserCategories(userId, [
+                fields.categoryId ?? current.categoryId,
+              ])
+            )[0]
+          : null;
+      if (category) {
+        assertCategoryMatchesType(category, fields.type ?? current.type);
+      }
+      // La cuenta destino solo existe en transferencias: si deja de serlo se borra.
+      const next = {
+        type: fields.type ?? current.type,
+        account: fields.account ?? current.account,
+        toAccount:
+          fields.toAccount !== undefined ? fields.toAccount : current.toAccount,
+      };
+      if (next.type !== 'transferencia') {
+        if (fields.toAccount) assertTransferAccounts(next);
+        next.toAccount = null;
+      }
+      assertTransferAccounts(next);
+      if (fields.account !== undefined || fields.toAccount) {
+        await this.assertUserAccounts(userId, accountIdsOf([next]));
+      }
+      const legacy =
+        category && fields.categoryId
+          ? { legacyCategoryName: category.name }
+          : {};
+      // Al elegir una cuenta real, el texto viejo deja de aplicar.
+      const legacyAccount =
+        fields.account !== undefined ? { legacyAccount: null } : {};
       await this.transactionRepository.update(
         { id, userId },
-        { ...fields, ...legacy },
+        { ...fields, toAccount: next.toAccount, ...legacy, ...legacyAccount },
       );
     }
 
@@ -208,7 +320,7 @@ export class TransactionsService {
    */
   async findOneWithDocuments(userId: string, id: string) {
     const transaction = await this.findOne(userId, id);
-    const documents = await this.buildDocumentsResponse(id);
+    const documents = await this.buildDocumentsResponse(userId, id);
 
     return { ...transaction, documents };
   }
@@ -221,7 +333,7 @@ export class TransactionsService {
     });
 
     if (documents.length) {
-      await this.s3Service.deleteFiles(documents.map((doc) => doc.keyS3));
+      await this.deleteDocumentObjects(userId, documents);
       await this.documentRepository.remove(documents);
     }
 
@@ -241,12 +353,12 @@ export class TransactionsService {
     const documents: Document[] = [];
 
     for (const file of files) {
-      // Nombre único en S3: evita sobrescribir un adjunto previo con el mismo
-      // nombre y mantiene la key 1 a 1 con el documento.
-      const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, '_')}`;
+      // Nombre único dentro del prefijo del usuario: evita sobrescribir un
+      // adjunto previo y mantiene la key 1 a 1 con el documento.
+      const uniqueName = `${randomUUID()}-${sanitizeFileName(file.originalname)}`;
 
       const result = await this.s3Service.upload(
-        `transactions/${transactionId}`,
+        `users/${userId}/transactions`,
         { ...file, originalname: uniqueName },
       );
 
@@ -270,6 +382,13 @@ export class TransactionsService {
     };
   }
 
+  /**
+   * Registra archivos que el cliente ya subió a S3 con una URL prefirmada.
+   * Solo acepta keys del propio usuario (las genera `POST /s3/presigned-url`)
+   * que existan en el bucket; el tamaño se toma de S3, no del cliente.
+   * También acepta evidencias subidas en el chat de Savvi IA (`savvi-ia/`): un
+   * mismo recibo puede quedar como soporte de varias transacciones.
+   */
   async confirmUploadedFiles(
     userId: string,
     transactionId: string,
@@ -277,14 +396,46 @@ export class TransactionsService {
   ) {
     const tx = await this.findOne(userId, transactionId);
 
-    const documents = files.map((f) =>
-      this.documentRepository.create({
-        name: f.name,
-        size: f.size,
-        bucket,
-        keyS3: f.key,
-        module: DOCUMENT_MODULE,
-        refId: tx.id.toString(),
+    const keys = [...new Set(files.map((f) => f.key))];
+    if (keys.length !== files.length) {
+      throw new BadRequestException('Hay archivos repetidos en la petición');
+    }
+    for (const key of keys) {
+      if (
+        !isUserKey(userId, key, DOCUMENT_MODULE) &&
+        !isUserKey(userId, key, 'savvi-ia')
+      ) {
+        throw new BadRequestException(
+          'El archivo no pertenece a tu cuenta. Súbelo de nuevo.',
+        );
+      }
+    }
+
+    const alreadyLinked = await this.documentRepository.count({
+      where: { keyS3: In(keys), module: DOCUMENT_MODULE, refId: tx.id },
+    });
+    if (alreadyLinked > 0) {
+      throw new BadRequestException(
+        'El archivo ya está adjunto a esta transacción',
+      );
+    }
+
+    const documents = await Promise.all(
+      files.map(async (f) => {
+        const info = await this.s3Service.getObjectInfo(f.key);
+        if (!info) {
+          throw new BadRequestException(
+            `El archivo ${f.name} no se encontró en el almacenamiento. Súbelo de nuevo.`,
+          );
+        }
+        return this.documentRepository.create({
+          name: f.name,
+          size: info.size || f.size,
+          bucket,
+          keyS3: f.key,
+          module: DOCUMENT_MODULE,
+          refId: tx.id.toString(),
+        });
       }),
     );
 
@@ -296,7 +447,7 @@ export class TransactionsService {
   async listTransactionDocuments(userId: string, transactionId: string) {
     await this.findOne(userId, transactionId);
 
-    return this.buildDocumentsResponse(transactionId);
+    return this.buildDocumentsResponse(userId, transactionId);
   }
 
   /**
@@ -323,7 +474,7 @@ export class TransactionsService {
       );
     }
 
-    await this.s3Service.deleteFile(document.keyS3);
+    await this.deleteDocumentObjects(userId, [document]);
     await this.documentRepository.remove(document);
 
     return {
@@ -362,7 +513,7 @@ export class TransactionsService {
       );
     }
 
-    await this.s3Service.deleteFiles(documents.map((doc) => doc.keyS3));
+    await this.deleteDocumentObjects(userId, documents);
     await this.documentRepository.remove(documents);
 
     return {
@@ -372,7 +523,27 @@ export class TransactionsService {
     };
   }
 
-  private async buildDocumentsResponse(transactionId: string) {
+  /**
+   * Borra de S3 los objetos de los documentos, pero nunca uno de otro usuario
+   * (keys de otro prefijo `users/`) ni uno que siga siendo soporte de otro
+   * documento (p. ej. un recibo de Savvi IA adjunto a varias transacciones).
+   */
+  private async deleteDocumentObjects(userId: string, documents: Document[]) {
+    const keys: string[] = [];
+    for (const doc of documents) {
+      if (doc.keyS3.startsWith('users/') && !isUserKey(userId, doc.keyS3)) {
+        continue;
+      }
+      const references = await this.documentRepository.count({
+        where: { keyS3: doc.keyS3 },
+      });
+      if (references <= 1) keys.push(doc.keyS3);
+    }
+    await this.s3Service.deleteFiles(keys);
+  }
+
+  /** Documentos con URL de descarga; nunca firma keys de otro usuario. */
+  private async buildDocumentsResponse(userId: string, transactionId: string) {
     const documents = await this.documentRepository.find({
       where: {
         module: DOCUMENT_MODULE,
@@ -388,8 +559,55 @@ export class TransactionsService {
         id: doc.id,
         name: doc.name,
         size: Number(doc.size),
-        url: await this.s3Service.getPresignedUrl(doc.keyS3, 3600),
+        url:
+          doc.keyS3.startsWith('users/') && !isUserKey(userId, doc.keyS3)
+            ? null
+            : await this.s3Service.getDownloadUrl(doc.keyS3, 3600),
       })),
     );
   }
+}
+
+/**
+ * La categoría debe ser del mismo tipo que la transacción (las
+ * transferencias aceptan cualquiera).
+ */
+function assertCategoryMatchesType(
+  category: Category,
+  type: string,
+  row?: number,
+): void {
+  if (type === 'transferencia' || category.type === type) return;
+  const prefix = row ? `Fila ${row}: ` : '';
+  throw new BadRequestException(
+    `${prefix}la categoría "${category.name}" es de ${category.type === 'ingreso' ? 'ingresos' : 'gastos'} y la transacción es un ${type}.`,
+  );
+}
+
+/** Cuenta destino válida: solo en transferencias y distinta de la de origen. */
+function assertTransferAccounts(
+  row: { type: string; account?: string | null; toAccount?: string | null },
+  rowNumber?: number,
+): void {
+  if (!row.toAccount) return;
+  const prefix = rowNumber ? `Fila ${rowNumber}: ` : '';
+  if (row.type !== 'transferencia') {
+    throw new BadRequestException(
+      `${prefix}solo las transferencias tienen cuenta destino.`,
+    );
+  }
+  if (row.toAccount === row.account) {
+    throw new BadRequestException(
+      `${prefix}la cuenta destino debe ser distinta de la de origen.`,
+    );
+  }
+}
+
+/** Ids de cuenta (origen y destino) que deben pertenecer al usuario. */
+function accountIdsOf(
+  rows: { account?: string | null; toAccount?: string | null }[],
+): string[] {
+  return rows
+    .flatMap((row) => [row.account, row.toAccount])
+    .filter((id): id is string => Boolean(id));
 }

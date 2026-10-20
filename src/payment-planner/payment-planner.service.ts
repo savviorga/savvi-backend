@@ -4,7 +4,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { Debt } from './entities/debt.entity';
 import { DebtPayment } from './entities/debt-payment.entity';
 import { CreateDebtDto } from './dto/create-debt.dto';
@@ -12,6 +12,7 @@ import { UpdateDebtDto } from './dto/update-debt.dto';
 import { RegisterPaymentDto } from './dto/register-payment.dto';
 import { TransactionsService } from '../transactions/services/transactions.service';
 import { AccountsService } from '../accounts/accounts.service';
+import { todayInBogota } from '../common/bogota-time';
 
 @Injectable()
 export class PaymentPlannerService {
@@ -22,6 +23,7 @@ export class PaymentPlannerService {
     private readonly debtPaymentRepository: Repository<DebtPayment>,
     private readonly transactionsService: TransactionsService,
     private readonly accountsService: AccountsService,
+    private readonly dataSource: DataSource,
   ) {}
 
   async create(userId: string, createDebtDto: CreateDebtDto): Promise<Debt> {
@@ -132,59 +134,85 @@ export class PaymentPlannerService {
     return debt;
   }
 
+  /**
+   * Registra un abono: crea la transacción del pago, el abono y el nuevo saldo
+   * de la deuda en una sola transacción de base de datos. La deuda queda
+   * bloqueada (FOR UPDATE) mientras tanto, así dos abonos simultáneos no pueden
+   * pasar la validación con el mismo saldo.
+   */
   async registerPayment(
     userId: string,
     debtId: string,
     dto: RegisterPaymentDto,
   ): Promise<{ debt: Debt; payment: DebtPayment; transaction: unknown }> {
-    const debt = await this.findOne(userId, debtId);
-    if (debt.status === 'paid') {
-      throw new BadRequestException('Esta deuda ya está pagada');
-    }
-    const remaining = Number(debt.remainingAmount);
+    // Sin fecha, el abono es de hoy en Colombia (no en UTC del servidor).
+    const paidAtStr = dto.paidAt ? dto.paidAt.slice(0, 10) : todayInBogota();
     const amount = Number(dto.amount);
-    if (amount > remaining) {
-      throw new BadRequestException(
-        `El monto no puede ser mayor al pendiente (${remaining})`,
-      );
-    }
-    const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
-    const paidAtStr = paidAt.toISOString().slice(0, 10);
 
-    const description =
-      dto.description || `Pago planificador: ${debt.name} - ${debt.payee}`;
+    const { payment, transaction } = await this.dataSource.transaction(
+      async (manager) => {
+        const debt = await manager
+          .getRepository(Debt)
+          .createQueryBuilder('d')
+          .setLock('pessimistic_write')
+          .where('d.id = :debtId AND d.userId = :userId', { debtId, userId })
+          .getOne();
+        if (!debt) {
+          throw new NotFoundException('Deuda no encontrada');
+        }
+        if (debt.status === 'paid') {
+          throw new BadRequestException('Esta deuda ya está pagada');
+        }
+        const remaining = Number(debt.remainingAmount);
+        if (amount > remaining) {
+          throw new BadRequestException(
+            `El monto no puede ser mayor al pendiente (${remaining})`,
+          );
+        }
 
-    const transaction = await this.transactionsService.create(userId, {
-      date: paidAtStr,
-      type: 'egreso',
-      amount,
-      categoryId: dto.categoryId,
-      account: dto.account,
-      description,
-    });
+        const created = await this.transactionsService.create(
+          userId,
+          {
+            date: paidAtStr,
+            type: 'egreso',
+            amount,
+            categoryId: dto.categoryId,
+            account: dto.account,
+            description:
+              dto.description ||
+              `Pago planificador: ${debt.name} - ${debt.payee}`,
+          },
+          manager,
+        );
 
-    const payment = this.debtPaymentRepository.create({
-      debtId,
-      amount,
-      paidAt,
-      transactionId: (transaction as { id: string }).id,
-    });
-    const savedPayment = await this.debtPaymentRepository.save(payment);
+        const saved = await manager.save(
+          manager.create(DebtPayment, {
+            debtId,
+            amount,
+            paidAt: paidAtStr as unknown as Date,
+            transactionId: created.id,
+          }),
+        );
 
-    const newRemaining = remaining - amount;
-    const newStatus = newRemaining <= 0 ? 'paid' : 'pending';
-    await this.debtRepository.update(
-      { id: debtId, userId },
-      {
-        remainingAmount: newRemaining,
-        status: newStatus,
+        const newRemaining = Math.max(
+          0,
+          Math.round((remaining - amount) * 100) / 100,
+        );
+        await manager.update(
+          Debt,
+          { id: debtId, userId },
+          {
+            remainingAmount: newRemaining,
+            status: newRemaining <= 0 ? 'paid' : 'pending',
+          },
+        );
+        return { payment: saved, transaction: created };
       },
     );
 
-    const updatedDebt = await this.findOne(userId, debtId);
     return {
-      debt: updatedDebt,
-      payment: savedPayment,
+      debt: await this.findOne(userId, debtId),
+      payment,
       transaction,
     };
   }

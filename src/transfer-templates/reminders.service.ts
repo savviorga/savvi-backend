@@ -8,6 +8,7 @@ import { Repository } from 'typeorm';
 import { Reminder } from './entities/reminder.entity';
 import { TransferTemplate } from './entities/transfer-template.entity';
 import { calcNextDueDate } from './transfer-schedule.util';
+import { todayInBogota } from '../common/bogota-time';
 
 @Injectable()
 export class RemindersService {
@@ -23,7 +24,7 @@ export class RemindersService {
       .createQueryBuilder('r')
       .innerJoinAndSelect('r.template', 't')
       .where('t.userId = :userId', { userId })
-      .andWhere('t.nextDueDate = CURRENT_DATE')
+      .andWhere('t.nextDueDate = :today', { today: todayInBogota() })
       .andWhere('t.isActive = true')
       .andWhere('r.status = :status', { status: 'scheduled' })
       .orderBy('r.scheduledAt', 'ASC')

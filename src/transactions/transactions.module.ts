@@ -6,10 +6,11 @@ import { Transaction } from './entities/transaction.entity';
 import { Document } from './entities/document.entity';
 import { S3Module } from '../s3/s3.module';
 import { Category } from '../categories/entities/category.entity';
+import { Account } from '../accounts/entities/account.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Transaction, Document, Category]),
+    TypeOrmModule.forFeature([Transaction, Document, Category, Account]),
     S3Module,
   ],
   controllers: [TransactionsController],

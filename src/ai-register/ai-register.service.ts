@@ -1,9 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { TransactionsService } from '../transactions/services/transactions.service';
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { S3Service } from '../s3/s3.service';
+import { isUserKey } from '../s3/s3-keys';
+import { todayInBogota } from '../common/bogota-time';
 import { CreateAiRegisterJobDto } from './dto/create-ai-register-job.dto';
 import { AiRegisterJobResponseDto } from './dto/ai-register-job-response.dto';
 import { AiRegisterJob } from './entities/ai-register-job.entity';
@@ -45,7 +51,7 @@ export class AiRegisterService {
     dto: CreateAiRegisterJobDto,
   ): Promise<AiRegisterJobResponseDto> {
     this.validateCreateJobInput(dto);
-    await this.assertUserOwnsFile(dto.key);
+    await this.assertUserOwnsFile(userId, dto.key);
 
     const job = this.aiRegisterJobRepository.create({
       userId,
@@ -63,7 +69,9 @@ export class AiRegisterService {
   }
 
   async getJob(userId: string, id: string): Promise<AiRegisterJobResponseDto> {
-    const job = await this.aiRegisterJobRepository.findOne({ where: { id, userId } });
+    const job = await this.aiRegisterJobRepository.findOne({
+      where: { id, userId },
+    });
     if (!job) {
       throw new NotFoundException('Job no encontrado');
     }
@@ -71,11 +79,16 @@ export class AiRegisterService {
   }
 
   private async processJob(jobId: string): Promise<void> {
-    const job = await this.aiRegisterJobRepository.findOne({ where: { id: jobId } });
+    const job = await this.aiRegisterJobRepository.findOne({
+      where: { id: jobId },
+    });
     if (!job) return;
 
     try {
-      await this.aiRegisterJobRepository.update(job.id, { status: 'processing', error: null });
+      await this.aiRegisterJobRepository.update(job.id, {
+        status: 'processing',
+        error: null,
+      });
       const extractedData = this.extractTransactionData(job);
       const { categoryName, ...fields } = extractedData;
       const category = await this.transactionsService.findOrCreateCategory(
@@ -94,7 +107,9 @@ export class AiRegisterService {
       });
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : 'Error procesando archivo para registro';
+        error instanceof Error
+          ? error.message
+          : 'Error procesando archivo para registro';
       await this.aiRegisterJobRepository.update(job.id, {
         status: 'failed',
         error: message.slice(0, 500),
@@ -122,19 +137,26 @@ export class AiRegisterService {
     }
   }
 
-  private async assertUserOwnsFile(fileKey: string): Promise<void> {
-    if (!fileKey.startsWith('savvi-ia/')) {
-      throw new BadRequestException('El archivo debe subirse en la carpeta savvi-ia');
+  private async assertUserOwnsFile(
+    userId: string,
+    fileKey: string,
+  ): Promise<void> {
+    if (!isUserKey(userId, fileKey, 'savvi-ia')) {
+      throw new BadRequestException(
+        'El archivo debe subirse en tu carpeta de Savvi IA',
+      );
     }
-    const files = await this.s3Service.listFiles('savvi-ia');
-    const keyMatch = files.some((key) => key === fileKey);
-    if (!keyMatch) {
-      throw new BadRequestException('El archivo indicado no existe o no es accesible');
+    if (!(await this.s3Service.getObjectInfo(fileKey))) {
+      throw new BadRequestException(
+        'El archivo indicado no existe o no es accesible',
+      );
     }
   }
 
   private extractTransactionData(job: AiRegisterJob): ExtractedTransactionData {
-    const textInput = `${job.fileName} ${job.userText || ''}`.trim().toLowerCase();
+    const textInput = `${job.fileName} ${job.userText || ''}`
+      .trim()
+      .toLowerCase();
 
     const amount = this.extractAmount(textInput);
     if (!amount || amount <= 0) {
@@ -144,7 +166,7 @@ export class AiRegisterService {
     }
 
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: todayInBogota(),
       type: this.extractType(textInput),
       amount,
       categoryName: this.extractCategory(textInput),
@@ -154,7 +176,9 @@ export class AiRegisterService {
   }
 
   private extractAmount(input: string): number | null {
-    const amountMatch = input.match(/(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/);
+    const amountMatch = input.match(
+      /(\d{1,3}(?:[.,]\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?)/,
+    );
     if (!amountMatch) return null;
 
     const normalized = amountMatch[1].replace(/\./g, '').replace(',', '.');

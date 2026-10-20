@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -23,6 +24,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
+import { AuthThrottle } from './auth-throttle';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
@@ -49,6 +51,7 @@ export class AuthController {
   ) {}
 
   @Post('register')
+  @AuthThrottle.register()
   @ApiOperation({
     summary: 'Registrar un nuevo usuario',
     description:
@@ -67,6 +70,7 @@ export class AuthController {
   }
 
   @Post('login')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Iniciar sesión',
@@ -87,13 +91,31 @@ export class AuthController {
   @ApiBadRequestResponse({ description: 'Datos inválidos' })
   @ApiUnauthorizedResponse({ description: 'Email o contraseña incorrectos' })
   @ApiTooManyRequestsResponse({
-    description: 'Con 2FA: ya se envió un código hace menos de 60 s',
+    description:
+      'Demasiados intentos (por IP o cuenta bloqueada temporalmente) o, con 2FA, código enviado hace menos de 60 s',
   })
   @ApiInternalServerErrorResponse({
     description: 'Con 2FA: no se pudo enviar el email',
   })
   login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT')
+  @ApiOperation({
+    summary: 'Usuario de la sesión',
+    description:
+      'Valida el JWT y devuelve el id, nombre y email del usuario. Lo usan los servicios internos (p. ej. las rutas de IA del frontend) para verificar la sesión.',
+  })
+  @ApiOkResponse({ description: 'Sesión válida' })
+  @ApiUnauthorizedResponse({
+    description: 'Token JWT ausente, inválido o vencido',
+  })
+  me(@Req() req: Request) {
+    const userId = (req.user as { userId: string }).userId;
+    return this.authService.getSessionUser(userId);
   }
 
   @Post('refresh')
@@ -103,18 +125,22 @@ export class AuthController {
   @ApiOperation({
     summary: 'Renovar la sesión',
     description:
-      'Con un JWT aún vigente devuelve uno nuevo (otros 7 días) y el usuario actualizado. El frontend lo llama mientras el usuario esté activo para que la sesión no venza en medio del uso.',
+      'Con un JWT aún vigente devuelve uno nuevo (otros 7 días) y el usuario actualizado. El frontend lo llama mientras el usuario esté activo para que la sesión no venza en medio del uso. Pasados 30 días desde el login responde 401.',
   })
   @ApiOkResponse({ description: 'Sesión renovada', type: AuthResponseDto })
   @ApiUnauthorizedResponse({
     description: 'Token JWT ausente, inválido o vencido',
   })
   refresh(@Req() req: Request) {
-    const userId = (req.user as { userId: string }).userId;
-    return this.authService.refreshSession(userId);
+    const { userId, authTime } = req.user as {
+      userId: string;
+      authTime?: number;
+    };
+    return this.authService.refreshSession(userId, authTime);
   }
 
   @Post('forgot-password')
+  @AuthThrottle.email()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Solicitar código de recuperación de contraseña',
@@ -132,6 +158,7 @@ export class AuthController {
   }
 
   @Post('verify-reset-code')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Verificar código de recuperación',
@@ -150,6 +177,7 @@ export class AuthController {
   }
 
   @Post('reset-password')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Restablecer contraseña',

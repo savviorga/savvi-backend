@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { TwoFactorService } from './two-factor.service';
+import { AuthThrottle } from './auth-throttle';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import {
@@ -42,6 +43,7 @@ export class TwoFactorController {
   ) {}
 
   @Post('verify')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Completar el login con el código 2FA',
@@ -58,6 +60,7 @@ export class TwoFactorController {
   }
 
   @Post('resend')
+  @AuthThrottle.email()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Reenviar el código 2FA del login',
@@ -77,6 +80,7 @@ export class TwoFactorController {
   }
 
   @Post('enable')
+  @AuthThrottle.email()
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
@@ -98,6 +102,7 @@ export class TwoFactorController {
   }
 
   @Post('enable/confirm')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
@@ -119,6 +124,7 @@ export class TwoFactorController {
   }
 
   @Post('disable')
+  @AuthThrottle.strict()
   @HttpCode(HttpStatus.OK)
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT')
@@ -134,8 +140,16 @@ export class TwoFactorController {
   @ApiUnauthorizedResponse({
     description: 'Token JWT ausente/inválido o contraseña incorrecta',
   })
-  disable(@Req() req: Request, @Body() dto: DisableTwoFactorDto) {
-    const userId = (req.user as { userId: string }).userId;
-    return this.twoFactorService.disable(userId, dto);
+  async disable(@Req() req: Request, @Body() dto: DisableTwoFactorDto) {
+    const { userId, authTime } = req.user as {
+      userId: string;
+      authTime?: number;
+    };
+    const result = await this.twoFactorService.disable(userId, dto);
+    // Cambio de seguridad: se cierran las demás sesiones.
+    return {
+      ...result,
+      ...(await this.authService.rotateSession(userId, authTime)),
+    };
   }
 }

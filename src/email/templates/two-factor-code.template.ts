@@ -1,6 +1,6 @@
 import { EmailTemplate, renderCodeEmail } from './layout';
 
-export type TwoFactorCodePurpose = 'login' | 'enable';
+export type TwoFactorCodePurpose = 'login' | 'enable' | 'email_change';
 
 export interface TwoFactorCodeTemplateData {
   name: string;
@@ -39,6 +39,16 @@ const COPY: Record<
       'Ingresa este código en Savvi para activar la verificación en dos pasos. Desde ahora te pediremos un código como este cada vez que inicies sesión.',
     footnote:
       'Si no solicitaste este cambio, ignora este correo: no se activará nada.',
+  },
+  email_change: {
+    subject: 'es tu código para confirmar tu nuevo email en Savvi',
+    eyebrow: 'CAMBIO DE EMAIL',
+    title: 'Confirma tu',
+    titleAccent: 'nuevo email.',
+    intro:
+      'Pediste usar este correo en tu cuenta de Savvi. Ingresa este código para confirmar el cambio:',
+    footnote:
+      'Si no solicitaste este cambio, ignora este correo: tu cuenta no se modificará.',
   },
 };
 

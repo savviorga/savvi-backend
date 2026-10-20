@@ -7,9 +7,15 @@ import {
   IsNotEmpty,
   IsPositive,
   IsUUID,
+  IsIn,
   MaxLength,
   Min,
+  ValidateIf,
 } from 'class-validator';
+import {
+  TRANSACTION_TYPES,
+  type TransactionType,
+} from '../entities/transaction.entity';
 
 export class CreateTransactionDto {
   @ApiProperty({
@@ -26,10 +32,14 @@ export class CreateTransactionDto {
 
   @ApiProperty({
     description: 'Tipo de la transacción',
+    enum: TRANSACTION_TYPES,
     example: 'egreso',
   })
   @IsNotEmpty({ message: 'El tipo de transacción es requerido' })
-  type: string;
+  @IsIn(TRANSACTION_TYPES, {
+    message: "El tipo debe ser 'ingreso', 'egreso' o 'transferencia'",
+  })
+  type: TransactionType;
 
   @ApiProperty({
     description: 'Monto de la transacción',
@@ -45,23 +55,37 @@ export class CreateTransactionDto {
   amount: number;
 
   @ApiProperty({
-    description: 'Id de la categoría (del mismo usuario)',
+    description:
+      'Id de la categoría (del mismo usuario). Opcional en transferencias: sin ella se usa "Transferencias".',
     example: '87a1883c-8464-4d0f-b450-771ca2886c38',
     format: 'uuid',
   })
+  @ValidateIf(
+    (dto: CreateTransactionDto) =>
+      dto.type !== 'transferencia' || dto.categoryId != null,
+  )
   @IsNotEmpty({ message: 'La categoría es requerida' })
   @IsUUID('all', { message: 'La categoría no es válida' })
   categoryId: string;
 
   @ApiProperty({
-    description: 'Cuenta asociada a la transacción',
-    example: 'Cuenta Corriente Banco',
-    maxLength: 100,
+    description: 'Id (UUID) de una cuenta del usuario',
+    example: '5b1c9a3e-2f4d-4c6a-9e8b-7a1d2c3b4e5f',
+    format: 'uuid',
   })
-  @IsString({ message: 'La cuenta debe ser texto' })
   @IsNotEmpty({ message: 'La cuenta es requerida' })
-  @MaxLength(100, { message: 'La cuenta no puede exceder los 100 caracteres' })
+  @IsUUID('all', { message: 'La cuenta no es válida' })
   account: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Solo transferencias: cuenta destino (del usuario, distinta de `account`). Sin ella, la transferencia es un pago a un tercero.',
+    format: 'uuid',
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID('all', { message: 'La cuenta destino no es válida' })
+  toAccount?: string | null;
 
   @ApiPropertyOptional({
     description: 'Descripción adicional de la transacción',

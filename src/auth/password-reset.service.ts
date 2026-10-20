@@ -190,6 +190,8 @@ export class PasswordResetService {
       }
 
       await manager.update(User, reset.userId, { password: hashedPassword });
+      // Cierra todas las sesiones abiertas con la contraseña anterior.
+      await manager.increment(User, { id: reset.userId }, 'tokenVersion', 1);
 
       // Invalida cualquier otra solicitud abierta del usuario
       await manager.update(

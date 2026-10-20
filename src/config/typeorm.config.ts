@@ -27,7 +27,10 @@ export const dataSourceOptions: DataSourceOptions = {
   entities: [__dirname + '/../**/*.entity{.ts,.js}'],
   migrations: [__dirname + '/../migrations/*{.ts,.js}'],
   synchronize: false, // nunca en producción
-  logging: true,
+  // Todas las queries (con sus parámetros) solo si se pide: en producción
+  // llenarían los logs de datos financieros.
+  logging:
+    process.env.DB_LOGGING === 'true' ? true : ['error', 'warn', 'migration'],
 };
 
 export const AppDataSource = new DataSource(dataSourceOptions);

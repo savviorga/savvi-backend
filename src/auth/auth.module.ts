@@ -11,18 +11,21 @@ import { TwoFactorService } from './two-factor.service';
 import { TwoFactorController } from './two-factor.controller';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { getJwtSecret } from '../config/env';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, PasswordReset, TwoFactorChallenge]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
-    JwtModule.register({
-      secret: process.env.JWT_SECRET || 'savvi-secret-change-in-production',
-      signOptions: { expiresIn: '7d' },
+    JwtModule.registerAsync({
+      useFactory: () => ({
+        secret: getJwtSecret(),
+        signOptions: { expiresIn: '7d' },
+      }),
     }),
   ],
   controllers: [AuthController, TwoFactorController],
   providers: [AuthService, PasswordResetService, TwoFactorService, JwtStrategy],
-  exports: [AuthService, JwtModule],
+  exports: [AuthService, TwoFactorService, JwtModule],
 })
 export class AuthModule {}

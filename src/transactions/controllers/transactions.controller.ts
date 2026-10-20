@@ -113,10 +113,7 @@ export class TransactionsController {
   })
   @ApiOkResponse({ description: 'Listado de documentos' })
   @ApiNotFoundResponse({ description: 'La transacción no existe' })
-  listDocuments(
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  listDocuments(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     const userId = (req.user as { userId: string }).userId;
     return this.transactionsService.listTransactionDocuments(userId, id);
   }
@@ -130,10 +127,7 @@ export class TransactionsController {
   })
   @ApiOkResponse({ description: 'Transacción encontrada' })
   @ApiNotFoundResponse({ description: 'La transacción no existe' })
-  findOne(
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  findOne(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     const userId = (req.user as { userId: string }).userId;
     return this.transactionsService.findOne(userId, id);
   }
@@ -179,10 +173,7 @@ export class TransactionsController {
   })
   @ApiNoContentResponse({ description: 'Transacción eliminada' })
   @ApiNotFoundResponse({ description: 'La transacción no existe' })
-  remove(
-    @Req() req: Request,
-    @Param('id', ParseUUIDPipe) id: string,
-  ) {
+  remove(@Req() req: Request, @Param('id', ParseUUIDPipe) id: string) {
     const userId = (req.user as { userId: string }).userId;
     return this.transactionsService.remove(userId, id);
   }
@@ -220,7 +211,7 @@ export class TransactionsController {
   })
   uploadFiles(
     @Req() req: Request,
-    @Body('transactionId') transactionId: string,
+    @Body('transactionId', ParseUUIDPipe) transactionId: string,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
     const userId = (req.user as { userId: string }).userId;

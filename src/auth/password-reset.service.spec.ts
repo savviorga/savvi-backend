@@ -32,7 +32,7 @@ describe('PasswordResetService', () => {
     createQueryBuilder: jest.fn(() => queryBuilder),
   };
   const emailService = { sendPasswordResetCode: jest.fn() };
-  const manager = { update: jest.fn() };
+  const manager = { update: jest.fn(), increment: jest.fn() };
   const dataSource = {
     transaction: jest.fn((cb: (m: typeof manager) => unknown) => cb(manager)),
   };
@@ -176,6 +176,13 @@ describe('PasswordResetService', () => {
         PasswordReset,
         expect.objectContaining({ id: 'reset-1' }),
         expect.objectContaining({ usedAt: expect.any(Date) }),
+      );
+      // Las sesiones abiertas con la contraseña anterior dejan de servir.
+      expect(manager.increment).toHaveBeenCalledWith(
+        User,
+        { id: user.id },
+        'tokenVersion',
+        1,
       );
     });
 

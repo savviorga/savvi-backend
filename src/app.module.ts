@@ -1,4 +1,8 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { AppThrottlerGuard } from './auth/guards/app-throttler.guard';
+import { GLOBAL_THROTTLE } from './auth/auth-throttle';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { TypeOrmModule } from '@nestjs/typeorm';
@@ -14,12 +18,14 @@ import { TransferTemplatesModule } from './transfer-templates/transfer-templates
 import { WaitingListModule } from './waitinglist/waitinglist.module';
 import { AiRegisterModule } from './ai-register/ai-register.module';
 import { ProfileModule } from './profile/profile.module';
+import { AiUsageModule } from './ai-usage/ai-usage.module';
 import { EmailModule } from './email/email.module';
 
 @Module({
   imports: [
     TypeOrmModule.forRoot(dataSourceOptions),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot([GLOBAL_THROTTLE]),
     EmailModule,
     AuthModule,
     TransactionsModule,
@@ -31,8 +37,9 @@ import { EmailModule } from './email/email.module';
     WaitingListModule,
     AiRegisterModule,
     ProfileModule,
+    AiUsageModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, { provide: APP_GUARD, useClass: AppThrottlerGuard }],
 })
 export class AppModule {}

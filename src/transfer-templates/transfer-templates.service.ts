@@ -18,6 +18,7 @@ import { RemindersService } from './reminders.service';
 import { Reminder } from './entities/reminder.entity';
 import { calcNextDueDate } from './transfer-schedule.util';
 import { AccountsService } from '../accounts/accounts.service';
+import { todayInBogota } from '../common/bogota-time';
 
 function truncate(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value;
@@ -84,7 +85,7 @@ export class TransferTemplatesService {
   async findDueToday(): Promise<TransferTemplate[]> {
     return this.templateRepository
       .createQueryBuilder('t')
-      .where('t.nextDueDate = CURRENT_DATE')
+      .where('t.nextDueDate = :today', { today: todayInBogota() })
       .andWhere('t.isActive = true')
       .getMany();
   }
@@ -232,7 +233,7 @@ export class TransferTemplatesService {
     );
 
     const transactionPayload: CreateTransactionDto = {
-      date: new Date().toISOString().slice(0, 10),
+      date: todayInBogota(),
       type,
       amount,
       categoryId: category.id,

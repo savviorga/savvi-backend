@@ -8,6 +8,8 @@ import {
   ValidateNested,
   ArrayMinSize,
   IsArray,
+  MaxLength,
+  IsUUID,
 } from 'class-validator';
 
 export class UploadedFileMetadataDto {
@@ -17,6 +19,7 @@ export class UploadedFileMetadataDto {
   })
   @IsString({ message: 'key es requerido' })
   @IsNotEmpty()
+  @MaxLength(512)
   key: string;
 
   @ApiProperty({
@@ -25,6 +28,7 @@ export class UploadedFileMetadataDto {
   })
   @IsString({ message: 'name es requerido' })
   @IsNotEmpty()
+  @MaxLength(255)
   name: string;
 
   @ApiProperty({
@@ -45,6 +49,7 @@ export class ConfirmUploadDto {
   })
   @IsString({ message: 'transactionId es requerido' })
   @IsNotEmpty()
+  @IsUUID('all', { message: 'transactionId no es válido' })
   transactionId: string;
 
   @ApiProperty({
