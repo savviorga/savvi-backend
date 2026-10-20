@@ -3,9 +3,11 @@ import { ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { assertRequiredEnv } from './config/env';
+import { getCorsOrigins } from './config/cors';
 
 async function bootstrap() {
   assertRequiredEnv();
+  getCorsOrigins();
   const app = await NestFactory.create(AppModule);
 
   app.useGlobalPipes(
@@ -16,7 +18,7 @@ async function bootstrap() {
   );
 
   app.enableCors({
-    origin: '*', // o especifica ["http://127.0.0.1:5500"] si usas Live Server
+    origin: getCorsOrigins(),
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type, Authorization',
   });

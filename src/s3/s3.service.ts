@@ -24,6 +24,7 @@ import {
   resolveUploadModule,
   UPLOAD_URL_TTL_SECONDS,
 } from './s3-keys';
+import { getCorsOrigins } from '../config/cors';
 
 @Injectable()
 export class S3Service implements OnModuleInit {
@@ -33,7 +34,13 @@ export class S3Service implements OnModuleInit {
     await this.ensureBucketCors();
   }
 
+  /**
+   * Deja el CORS del bucket con los mismos orígenes de la API (`CORS_ORIGINS`)
+   * para la subida directa con URL prefirmada. Con `S3_MANAGE_CORS=false` no
+   * se toca y se administra desde la infraestructura.
+   */
   private async ensureBucketCors(): Promise<void> {
+    if (process.env.S3_MANAGE_CORS === 'false') return;
     try {
       await s3Client.send(
         new PutBucketCorsCommand({
@@ -41,9 +48,9 @@ export class S3Service implements OnModuleInit {
           CORSConfiguration: {
             CORSRules: [
               {
-                AllowedHeaders: ['*'],
+                AllowedHeaders: ['Content-Type'],
                 AllowedMethods: ['PUT', 'GET', 'HEAD'],
-                AllowedOrigins: ['*'],
+                AllowedOrigins: getCorsOrigins(),
                 ExposeHeaders: ['ETag'],
                 MaxAgeSeconds: 3600,
               },
@@ -52,9 +59,10 @@ export class S3Service implements OnModuleInit {
         }),
       );
       this.logger.log(`CORS configurado correctamente en bucket "${bucket}"`);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
       this.logger.warn(
-        `No se pudo configurar CORS en bucket "${bucket}": ${error.message}. ` +
+        `No se pudo configurar CORS en bucket "${bucket}": ${message}. ` +
           'Configúralo manualmente en la consola de AWS si la subida directa falla.',
       );
     }
