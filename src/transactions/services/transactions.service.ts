@@ -7,7 +7,7 @@ import { CreateTransactionDto } from '../dto/create-transaction.dto';
 import { UpdateTransactionDto } from '../dto/update-transaction.dto';
 import { UploadedFileMetadataDto } from '../dto/confirm-upload.dto';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { EntityManager, In, Repository } from 'typeorm';
 import { Transaction } from '../entities/transaction.entity';
 import { Document } from '../entities/document.entity';
 import { Category } from '../../categories/entities/category.entity';
@@ -35,22 +35,40 @@ export class TransactionsService {
     private readonly accountRepository: Repository<Account>,
   ) {}
 
+  /**
+   * Crea una transacción. Con `manager` corre dentro de una transacción de
+   * base de datos ajena (p. ej. el abono a una deuda), para guardar todo o nada.
+   */
   async create(
     userId: string,
     createTransactionDto: CreateTransactionDto,
+    manager?: EntityManager,
   ): Promise<Transaction> {
-    const [category] = await this.findUserCategories(userId, [
-      createTransactionDto.categoryId,
-    ]);
+    const [category] = await this.findUserCategories(
+      userId,
+      [createTransactionDto.categoryId],
+      manager,
+    );
     assertCategoryMatchesType(category, createTransactionDto.type);
-    await this.assertUserAccounts(userId, [createTransactionDto.account]);
-    const transaction = this.transactionRepository.create({
+    await this.assertUserAccounts(
+      userId,
+      [createTransactionDto.account],
+      manager,
+    );
+    const repository = this.transactions(manager);
+    const transaction = repository.create({
       ...createTransactionDto,
       userId,
       legacyCategoryName: category.name,
     });
-    const saved = await this.transactionRepository.save(transaction);
-    return this.findOne(userId, saved.id);
+    const saved = await repository.save(transaction);
+    return this.findOne(userId, saved.id, manager);
+  }
+
+  private transactions(manager?: EntityManager): Repository<Transaction> {
+    return manager
+      ? manager.getRepository(Transaction)
+      : this.transactionRepository;
   }
 
   /**
@@ -81,9 +99,13 @@ export class TransactionsService {
   private async findUserCategories(
     userId: string,
     categoryIds: string[],
+    manager?: EntityManager,
   ): Promise<Category[]> {
     const uniqueIds = [...new Set(categoryIds)];
-    const found = await this.categoryRepository.find({
+    const repository = manager
+      ? manager.getRepository(Category)
+      : this.categoryRepository;
+    const found = await repository.find({
       where: { id: In(uniqueIds), userId },
     });
     const byId = new Map(found.map((category) => [category.id, category]));
@@ -97,9 +119,13 @@ export class TransactionsService {
   private async assertUserAccounts(
     userId: string,
     accountIds: string[],
+    manager?: EntityManager,
   ): Promise<void> {
     const uniqueIds = [...new Set(accountIds)];
-    const found = await this.accountRepository.count({
+    const repository = manager
+      ? manager.getRepository(Account)
+      : this.accountRepository;
+    const found = await repository.count({
       where: { id: In(uniqueIds), userId },
     });
     if (found !== uniqueIds.length) {
@@ -182,8 +208,12 @@ export class TransactionsService {
     }));
   }
 
-  async findOne(userId: string, id: string): Promise<Transaction> {
-    const transaction = await this.transactionRepository.findOne({
+  async findOne(
+    userId: string,
+    id: string,
+    manager?: EntityManager,
+  ): Promise<Transaction> {
+    const transaction = await this.transactions(manager).findOne({
       where: { id, userId },
       relations: { category: { parent: true } },
     });
