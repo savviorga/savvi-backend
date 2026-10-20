@@ -388,7 +388,7 @@ export class TransactionsService {
         id: doc.id,
         name: doc.name,
         size: Number(doc.size),
-        url: await this.s3Service.getPresignedUrl(doc.keyS3, 3600),
+        url: await this.s3Service.getDownloadUrl(doc.keyS3, 3600),
       })),
     );
   }

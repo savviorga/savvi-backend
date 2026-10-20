@@ -7,7 +7,7 @@ describe('AiRegisterService', () => {
   let service: AiRegisterService;
   let repo: Partial<Repository<AiRegisterJob>>;
   let transactionsService: { create: jest.Mock };
-  let s3Service: { listFiles: jest.Mock };
+  let s3Service: { getObjectInfo: jest.Mock };
 
   beforeEach(() => {
     repo = {
@@ -21,7 +21,12 @@ describe('AiRegisterService', () => {
       update: jest.fn(async () => ({ affected: 1 })),
     };
     transactionsService = { create: jest.fn() };
-    s3Service = { listFiles: jest.fn(async () => ['savvi-ia/factura-1.jpg']) };
+    s3Service = {
+      getObjectInfo: jest.fn(async () => ({
+        size: 1000,
+        contentType: 'image/jpeg',
+      })),
+    };
 
     service = new AiRegisterService(
       repo as Repository<AiRegisterJob>,
@@ -36,7 +41,7 @@ describe('AiRegisterService', () => {
       .mockResolvedValue(undefined);
 
     const response = await service.createJob('user-1', {
-      key: 'savvi-ia/factura-1.jpg',
+      key: 'users/user-1/savvi-ia/abc-factura-1.jpg',
       name: 'factura-1.jpg',
       size: 1000,
       mimeType: 'image/jpeg',

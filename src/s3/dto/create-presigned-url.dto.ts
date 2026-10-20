@@ -6,6 +6,7 @@ import {
   IsInt,
   Min,
   Max,
+  MaxLength,
 } from 'class-validator';
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB
@@ -36,6 +37,7 @@ export class CreatePresignedUrlDto {
   })
   @IsString({ message: 'filename debe ser un string' })
   @IsNotEmpty({ message: 'filename es requerido' })
+  @MaxLength(255)
   filename: string;
 
   @ApiProperty({
@@ -48,16 +50,18 @@ export class CreatePresignedUrlDto {
   contentType: string;
 
   @ApiPropertyOptional({
-    description: 'Carpeta (prefijo) dentro del bucket',
+    description:
+      'Módulo del archivo: `transactions` (o `transactions/<id>`) o `savvi-ia`. Por defecto `transactions`.',
     example: 'transactions',
-    default: 'uploads',
+    default: 'transactions',
   })
   @IsString()
   @IsOptional()
+  @MaxLength(200)
   folder?: string;
 
-  @ApiPropertyOptional({
-    description: `Tamaño del archivo en bytes (máx. ${MAX_FILE_SIZE / 1024 / 1024} MB)`,
+  @ApiProperty({
+    description: `Tamaño exacto del archivo en bytes (máx. ${MAX_FILE_SIZE / 1024 / 1024} MB). Queda firmado en la URL.`,
     example: 245678,
     minimum: 1,
     maximum: MAX_FILE_SIZE,
@@ -67,6 +71,5 @@ export class CreatePresignedUrlDto {
   @Max(MAX_FILE_SIZE, {
     message: `fileSize no puede superar ${MAX_FILE_SIZE / 1024 / 1024} MB`,
   })
-  @IsOptional()
-  fileSize?: number;
+  fileSize: number;
 }

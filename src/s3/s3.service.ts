@@ -11,14 +11,19 @@ import {
   PutBucketCorsCommand,
   DeleteObjectCommand,
   DeleteObjectsCommand,
+  HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { s3Client, bucket } from '../infrastructure/config/s3.config';
 import * as fs from 'fs';
 import * as mime from 'mime-types';
-import { PresignedUrlResponseDto } from './dto/presigned-url.dto';
 import { UploadS3Response } from './types';
 import { Readable } from 'stream';
+import {
+  buildUserKey,
+  resolveUploadModule,
+  UPLOAD_URL_TTL_SECONDS,
+} from './s3-keys';
 
 @Injectable()
 export class S3Service implements OnModuleInit {
@@ -214,110 +219,81 @@ export class S3Service implements OnModuleInit {
     }
   }
 
-  async generatePresignedUrl(
-    folder: string,
-    fileName: string,
-    operation: 'putObject' | 'getObject' = 'putObject',
-    expiresIn: number = 3600,
-  ): Promise<PresignedUrlResponseDto> {
-    try {
-      const key = `${folder}/${fileName}`;
-      const contentType = mime.lookup(fileName) || 'application/octet-stream';
-
-      const url =
-        operation === 'putObject'
-          ? await getSignedUrl(
-              s3Client,
-              new PutObjectCommand({
-                Bucket: bucket,
-                Key: key,
-                ContentType: contentType,
-              }),
-              { expiresIn },
-            )
-          : await getSignedUrl(
-              s3Client,
-              new GetObjectCommand({
-                Bucket: bucket,
-                Key: key,
-              }),
-              { expiresIn },
-            );
-
-      return {
-        url,
-        key,
-        bucket,
-        expiresIn,
-        operation,
-      };
-    } catch (error: any) {
-      console.error(`Error generating presigned URL for ${operation}:`, error);
-      throw new InternalServerErrorException({
-        message: `Error al generar la URL firmada para ${operation}`,
-        detail: error?.message || error,
-      });
-    }
-  }
-
   /**
-   * Genera una URL prefirmada para PUT con contentType explícito y key completa.
-   * Usada por el flujo de subida directa desde el cliente.
+   * URL prefirmada (PUT) para que el cliente suba directo a S3. La key la
+   * genera el servidor dentro del prefijo del usuario; el tamaño y el tipo
+   * quedan firmados, así que S3 rechaza un archivo distinto al declarado.
    */
-  async generatePresignedUploadUrl(
-    key: string,
-    contentType: string,
-    expiresIn: number = 60,
-  ): Promise<{ url: string; key: string }> {
+  async createUserUploadUrl(
+    userId: string,
+    input: {
+      filename: string;
+      contentType: string;
+      fileSize: number;
+      folder?: string;
+    },
+  ): Promise<{ url: string; key: string; expiresIn: number }> {
+    const module = resolveUploadModule(input.folder);
+    const key = buildUserKey(userId, module, input.filename);
     try {
       const url = await getSignedUrl(
         s3Client,
         new PutObjectCommand({
           Bucket: bucket,
           Key: key,
-          ContentType: contentType,
+          ContentType: input.contentType,
+          ContentLength: input.fileSize,
         }),
-        { expiresIn },
+        {
+          expiresIn: UPLOAD_URL_TTL_SECONDS,
+          signableHeaders: new Set(['content-type', 'content-length']),
+        },
       );
-
-      return { url, key };
-    } catch (error: any) {
-      console.error('Error generating presigned upload URL:', error);
-      throw new InternalServerErrorException({
-        message: 'Error al generar la URL firmada para subida',
-        detail: error?.message || error,
-      });
+      return { url, key, expiresIn: UPLOAD_URL_TTL_SECONDS };
+    } catch (error: unknown) {
+      this.logger.error('Error generando URL prefirmada de subida', error);
+      throw new InternalServerErrorException(
+        'Error al generar la URL firmada para subida',
+      );
     }
   }
 
-  async generateUploadUrl(
-    folder: string,
-    fileName: string,
-    expiresIn: number = 3600,
-  ): Promise<PresignedUrlResponseDto> {
-    return this.generatePresignedUrl(folder, fileName, 'putObject', expiresIn);
+  /** Tamaño y tipo de un objeto, o `null` si no existe. */
+  async getObjectInfo(
+    key: string,
+  ): Promise<{ size: number; contentType: string | null } | null> {
+    try {
+      const head = await s3Client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: key }),
+      );
+      return {
+        size: Number(head.ContentLength ?? 0),
+        contentType: head.ContentType ?? null,
+      };
+    } catch (error: unknown) {
+      const status = (error as { $metadata?: { httpStatusCode?: number } })
+        .$metadata?.httpStatusCode;
+      if (status === 404 || status === 403) return null;
+      this.logger.error(`Error consultando ${key} en S3`, error);
+      throw new InternalServerErrorException(
+        'No se pudo verificar el archivo en S3',
+      );
+    }
   }
 
-  async generateDownloadUrl(
-    folder: string,
-    fileName: string,
-    expiresIn: number = 3600,
-  ): Promise<PresignedUrlResponseDto> {
-    return this.generatePresignedUrl(folder, fileName, 'getObject', expiresIn);
-  }
-
-  async getPresignedUrl(
-    relativePath: string,
-    expiresIn: number = 3600,
-  ): Promise<string> {
-    const [folder, ...fileParts] = relativePath.split('/');
-    const fileName = fileParts.join('/');
-    const presigned = await this.generatePresignedUrl(
-      folder,
-      fileName,
-      'getObject',
-      expiresIn,
-    );
-    return presigned.url;
+  /** URL prefirmada de descarga (GET) para una key completa. */
+  async getDownloadUrl(key: string, expiresIn = 3600): Promise<string> {
+    try {
+      return await getSignedUrl(
+        s3Client,
+        new GetObjectCommand({ Bucket: bucket, Key: key }),
+        { expiresIn },
+      );
+    } catch (error: unknown) {
+      this.logger.error(`Error generando URL de descarga para ${key}`, error);
+      throw new InternalServerErrorException(
+        'Error al generar la URL firmada de descarga',
+      );
+    }
   }
 }
