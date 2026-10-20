@@ -9,6 +9,7 @@ import { TransactionsService } from '../transactions/services/transactions.servi
 import { CreateTransactionDto } from '../transactions/dto/create-transaction.dto';
 import { S3Service } from '../s3/s3.service';
 import { isUserKey } from '../s3/s3-keys';
+import { todayInBogota } from '../common/bogota-time';
 import { CreateAiRegisterJobDto } from './dto/create-ai-register-job.dto';
 import { AiRegisterJobResponseDto } from './dto/ai-register-job-response.dto';
 import { AiRegisterJob } from './entities/ai-register-job.entity';
@@ -165,7 +166,7 @@ export class AiRegisterService {
     }
 
     return {
-      date: new Date().toISOString().slice(0, 10),
+      date: todayInBogota(),
       type: this.extractType(textInput),
       amount,
       categoryName: this.extractCategory(textInput),

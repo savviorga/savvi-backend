@@ -12,6 +12,7 @@ import { UpdateDebtDto } from './dto/update-debt.dto';
 import { RegisterPaymentDto } from './dto/register-payment.dto';
 import { TransactionsService } from '../transactions/services/transactions.service';
 import { AccountsService } from '../accounts/accounts.service';
+import { todayInBogota } from '../common/bogota-time';
 
 @Injectable()
 export class PaymentPlannerService {
@@ -148,8 +149,9 @@ export class PaymentPlannerService {
         `El monto no puede ser mayor al pendiente (${remaining})`,
       );
     }
-    const paidAt = dto.paidAt ? new Date(dto.paidAt) : new Date();
-    const paidAtStr = paidAt.toISOString().slice(0, 10);
+    // Sin fecha, el abono es de hoy en Colombia (no en UTC del servidor).
+    const paidAtStr = dto.paidAt ? dto.paidAt.slice(0, 10) : todayInBogota();
+    const paidAt = paidAtStr as unknown as Date;
 
     const description =
       dto.description || `Pago planificador: ${debt.name} - ${debt.payee}`;

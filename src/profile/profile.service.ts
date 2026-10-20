@@ -19,6 +19,13 @@ import { TransferTemplate } from '../transfer-templates/entities/transfer-templa
 import { AiRegisterJob } from '../ai-register/entities/ai-register-job.entity';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import {
+  currentMonthInBogota,
+  monthKey,
+  monthStartISO,
+  shiftMonth,
+  todayInBogota,
+} from '../common/bogota-time';
 
 const DOCUMENT_MODULE = 'transactions';
 const MONTHLY_SERIES_LENGTH = 12;
@@ -242,6 +249,8 @@ export class ProfileService {
   }
 
   private async currentMonthStats(userId: string) {
+    const { year, month } = currentMonthInBogota();
+    const next = shiftMonth(year, month, 1);
     const row = await this.transactionRepository
       .createQueryBuilder('t')
       .select('COUNT(*)', 'count')
@@ -254,15 +263,17 @@ export class ProfileService {
         'expense',
       )
       .where('t.userId = :userId', { userId })
-      .andWhere(
-        `DATE_TRUNC('month', t.date) = DATE_TRUNC('month', CURRENT_DATE)`,
-      )
+      // Mes en curso en hora de Colombia (la base corre en UTC).
+      .andWhere('t.date >= :start AND t.date < :end', {
+        start: monthStartISO(year, month),
+        end: monthStartISO(next.year, next.month),
+      })
       .getRawOne<Record<string, string | null>>();
 
     const income = round2(toNumber(row?.income));
     const expense = round2(toNumber(row?.expense));
     return {
-      month: new Date().toISOString().slice(0, 7),
+      month: monthKey(year, month),
       count: toNumber(row?.count),
       income,
       expense,
@@ -272,6 +283,8 @@ export class ProfileService {
 
   /** Ingresos/egresos de los últimos 12 meses (incluye el actual), con meses vacíos en 0. */
   private async monthlySeries(userId: string) {
+    const { year, month } = currentMonthInBogota();
+    const first = shiftMonth(year, month, -(MONTHLY_SERIES_LENGTH - 1));
     const rows = await this.transactionRepository
       .createQueryBuilder('t')
       .select(`TO_CHAR(t.date, 'YYYY-MM')`, 'month')
@@ -285,9 +298,9 @@ export class ProfileService {
       )
       .addSelect('COUNT(*)', 'count')
       .where('t.userId = :userId', { userId })
-      .andWhere(
-        `t.date >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '${MONTHLY_SERIES_LENGTH - 1} months'`,
-      )
+      .andWhere('t.date >= :start', {
+        start: monthStartISO(first.year, first.month),
+      })
       .groupBy(`TO_CHAR(t.date, 'YYYY-MM')`)
       .getRawMany<{
         month: string;
@@ -297,7 +310,6 @@ export class ProfileService {
       }>();
 
     const byMonth = new Map(rows.map((r) => [r.month, r]));
-    const now = new Date();
     const series: {
       month: string;
       income: number;
@@ -307,13 +319,13 @@ export class ProfileService {
     }[] = [];
 
     for (let i = MONTHLY_SERIES_LENGTH - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      const row = byMonth.get(month);
+      const m = shiftMonth(year, month, -i);
+      const key = monthKey(m.year, m.month);
+      const row = byMonth.get(key);
       const income = round2(toNumber(row?.income));
       const expense = round2(toNumber(row?.expense));
       series.push({
-        month,
+        month: key,
         income,
         expense,
         net: round2(income - expense),
@@ -420,7 +432,7 @@ export class ProfileService {
   }
 
   private async budgetStats(userId: string) {
-    const now = new Date();
+    const { year, month } = currentMonthInBogota();
     const row = await this.budgetRepository
       .createQueryBuilder('b')
       .innerJoin('b.category', 'c')
@@ -434,7 +446,7 @@ export class ProfileService {
         'currentMonthAmount',
       )
       .where('c.userId = :userId', { userId })
-      .setParameters({ year: now.getFullYear(), month: now.getMonth() + 1 })
+      .setParameters({ year, month })
       .getRawOne<Record<string, string>>();
 
     return {
@@ -455,10 +467,11 @@ export class ProfileService {
         'totalRemaining',
       )
       .addSelect(
-        `COUNT(*) FILTER (WHERE d.status = 'pending' AND d.dueDate < CURRENT_DATE)`,
+        `COUNT(*) FILTER (WHERE d.status = 'pending' AND d.dueDate < :today)`,
         'overdue',
       )
       .where('d.userId = :userId', { userId })
+      .setParameter('today', todayInBogota())
       .getRawOne<Record<string, string>>();
 
     return {

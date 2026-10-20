@@ -1,4 +1,6 @@
 import {
+  shiftMonth,
+  monthStartISO,
   currentMonthInBogota,
   startOfBogotaDay,
   startOfBogotaMonth,
@@ -20,5 +22,12 @@ describe('bogota-time', () => {
     expect(startOfBogotaMonth(lastNight).toISOString()).toBe(
       '2026-10-01T05:00:00.000Z',
     );
+  });
+
+  it('desplaza meses sin depender de la zona horaria', () => {
+    expect(shiftMonth(2026, 1, -1)).toEqual({ year: 2025, month: 12 });
+    expect(shiftMonth(2026, 10, -11)).toEqual({ year: 2025, month: 11 });
+    expect(shiftMonth(2026, 12, 1)).toEqual({ year: 2027, month: 1 });
+    expect(monthStartISO(2026, 3)).toBe('2026-03-01');
   });
 });

@@ -39,3 +39,23 @@ export function startOfBogotaMonth(now: Date = new Date()): Date {
   const { year, month } = currentMonthInBogota(now);
   return new Date(Date.UTC(year, month - 1, 1) + BOGOTA_OFFSET_MS);
 }
+
+/** Año y mes desplazados `delta` meses (sin pasar por fechas con zona horaria). */
+export function shiftMonth(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
+  const index = year * 12 + (month - 1) + delta;
+  return { year: Math.floor(index / 12), month: (index % 12) + 1 };
+}
+
+/** `YYYY-MM-01` del mes indicado. */
+export function monthStartISO(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-01`;
+}
+
+/** `YYYY-MM` del mes indicado. */
+export function monthKey(year: number, month: number): string {
+  return `${year}-${String(month).padStart(2, '0')}`;
+}
