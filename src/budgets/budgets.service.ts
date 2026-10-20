@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -12,6 +13,7 @@ import { UpdateBudgetDto } from './dto/update-budget.dto';
 import { CreateBudgetDetailDto } from './dto/create-budget-detail.dto';
 import { UpdateBudgetDetailDto } from './dto/update-budget-detail.dto';
 import { CategoriesService } from '../categories/categories.service';
+import { isUniqueViolation } from '../common/db-errors';
 
 @Injectable()
 export class BudgetsService {
@@ -114,14 +116,45 @@ export class BudgetsService {
     return budget;
   }
 
+  /**
+   * Edita el presupuesto. Si cambia la categoría, debe ser del usuario; en un
+   * presupuesto automático el monto lo dan las partidas, no el cliente.
+   */
   async update(
     userId: string,
     id: string,
     dto: UpdateBudgetDto,
   ): Promise<Budget> {
     const budget = await this.findOne(userId, id);
-    Object.assign(budget, dto);
-    return this.budgetRepository.save(budget);
+
+    if (dto.categoryId !== undefined && dto.categoryId !== budget.categoryId) {
+      await this.categoriesService.findOne(userId, dto.categoryId);
+    }
+
+    const { amount, ...rest } = dto;
+    const auto = rest.amountAutoCalculated ?? budget.amountAutoCalculated;
+    const patch: Partial<Budget> = { ...rest };
+    if (amount !== undefined && !auto) {
+      if (amount <= 0) {
+        throw new BadRequestException('El monto debe ser mayor a 0.');
+      }
+      patch.amount = amount;
+    }
+
+    if (Object.keys(patch).length > 0) {
+      try {
+        await this.budgetRepository.update(budget.id, patch);
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new ConflictException(
+            'Ya existe un presupuesto para esa categoría en ese mes.',
+          );
+        }
+        throw error;
+      }
+    }
+    if (auto) await this.syncAmountFromDetailsIfNeeded(budget.id);
+    return this.findOne(userId, budget.id);
   }
 
   async remove(userId: string, id: string): Promise<void> {
