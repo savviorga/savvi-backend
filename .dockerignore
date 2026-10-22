@@ -17,6 +17,7 @@ coverage
 # Bases de datos / dumps locales
 *.db
 *.sql
+*.dump
 
 # Logs
 logs
